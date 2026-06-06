@@ -48,7 +48,7 @@ export default function NewsDesk() {
   useEffect(() => {
     const link = document.createElement("link");
     link.rel = "stylesheet";
-    link.href = "https://fonts.googleapis.com/css2?family=Bitter:ital,wght@0,600;1,400&family=JetBrains+Mono:wght@400;500&display=swap";
+    link.href = "https://fonts.googleapis.com/css2?family=Bitter:ital,wght@0,600;1,400&family=Noto+Sans+Nabataean&display=swap";
     document.head.appendChild(link);
     const style = document.createElement("style");
     style.textContent = `
@@ -217,7 +217,7 @@ export default function NewsDesk() {
   });
 
   return (
-    <div style={{ display:"flex", height:"100vh", fontFamily:"'JetBrains Mono',monospace", background:C.bg, color:C.text, overflow:"hidden" }}>
+    <div style={{ display:"flex", height:"100vh", fontFamily:"'Noto Sans Nabataean',sans-serif", background:C.bg, color:C.text, overflow:"hidden" }}>
 
       {/* ── SIDEBAR ── */}
       <aside style={{ width:230, minWidth:230, background:C.surface, borderRight:`1px solid ${C.border}`, display:"flex", flexDirection:"column", overflow:"hidden" }}>
@@ -588,6 +588,6 @@ function GhostBtn({ onClick, label }) {
   );
 }
 
-const btnBase   = { background:"none", border:"1px solid #1e2230", color:"#4a5268", fontFamily:"'JetBrains Mono',monospace", fontSize:11, padding:"6px 10px", borderRadius:5, cursor:"pointer" };
-const inputSt   = { width:"100%", background:"#0b0d12", border:"1px solid #1e2230", color:"#c8cdd8", fontFamily:"'JetBrains Mono',monospace", fontSize:11, padding:"7px 9px", borderRadius:4 };
-const actionBtn = { fontFamily:"'JetBrains Mono',monospace", fontSize:10, padding:"5px 10px", borderRadius:4, cursor:"pointer", border:"1px solid", background:"none", transition:"all 0.15s" };
+const btnBase   = { background:"none", border:"1px solid #1e2230", color:"#4a5268", fontFamily:"'Noto Sans Nabataean',sans-serif", fontSize:11, padding:"6px 10px", borderRadius:5, cursor:"pointer" };
+const inputSt   = { width:"100%", background:"#0b0d12", border:"1px solid #1e2230", color:"#c8cdd8", fontFamily:"'Noto Sans Nabataean',sans-serif", fontSize:11, padding:"7px 9px", borderRadius:4 };
+const actionBtn = { fontFamily:"'Noto Sans Nabataean',sans-serif", fontSize:10, padding:"5px 10px", borderRadius:4, cursor:"pointer", border:"1px solid", background:"none", transition:"all 0.15s" };

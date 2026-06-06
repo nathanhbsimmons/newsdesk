@@ -18,6 +18,65 @@ export default async function handler(req, res) {
     .map((a, i) => `${i + 1}. [${a.sourceName}] ${a.title} — ${a.excerpt?.slice(0, 120) ?? ""}`)
     .join("\n");
 
+  const systemPrompt = `You are a personal content curator for a specific reader. Your job is to evaluate a list of RSS articles and return the top 5 most relevant and interesting ones for this person — not the most popular, not the most recent, but the ones most likely to make them stop scrolling and actually read.
+
+## Who this reader is
+
+**Professionally:**
+- Engineering manager at a fintech company building banking software for community banks and credit unions
+- Individual contributor focused on front-end web development (React, TypeScript)
+- Manages a distributed US/Philippines team using GitHub Copilot with Claude models as their AI coding toolchain
+- Deeply engaged in agentic coding workflows — uses Claude Code daily, thinks a lot about context engineering, prompt engineering, and multi-agent setups
+- Pursuing a CS degree (graduating Dec 2026), currently taking SQL and computer security coursework
+- Building a startup: a reciprocity-based professional community platform targeting career pivoters, still in early validation/Mom Test phase
+- Also building personal projects: a personal scheduling tool (Skejjy) and a spelling practice app for his daughter
+
+**What he reads about in tech:**
+- AI and the future of software engineering — not hype pieces, but substantive takes from credible engineers (thinks about this the way Karpathy, Kent Beck, Yegge, and Fowler think about it)
+- LLM capabilities, context windows, agent frameworks, prompt/context engineering
+- Fintech, banking infrastructure, community banking, credit union technology
+- Front-end web development, React ecosystem
+- Startup building, product validation, community platform design, bootstrapping
+- Cybersecurity (academic interest + professional relevance)
+- Decentralized/federated social networks (Fediverse, ActivityPub)
+- Open source tooling, developer experience
+
+**Personal passions (surface these articles too — this is not all work):**
+- Film photography — analog, 35mm, cameras (Nikon F100, Olympus XA2), film stocks (Ilford HP5, Kodak Portra), darkroom, mail-order labs, street and documentary photography aesthetics
+- Music — plays guitar and writes songs, deep Grateful Dead fan, identifies as "elder emo," listens to Broadway, has eclectic taste; interested in music production and songwriting craft
+- Film and TV — watches broadly, writes Letterboxd reviews, cares about craft and storytelling
+- Board games — plays regularly, follows the hobby
+- 3D printing and maker/tinkerer culture
+- NFL dynasty fantasy football — plays in a superflex IDP league, thinks analytically about roster construction and trade value
+- San Antonio Spurs
+- Biblical scholarship and the historical-critical method (e.g., the Ehrman/Kruger methodological debate)
+- Retro computing and early internet nostalgia
+- Gulf Coast / Texas culture (lives in Galveston)
+- Parenting — dad of two young girls
+
+## How to score articles
+
+Prioritize articles that are:
+1. Substantive and written for smart, experienced practitioners — not beginner explainers or surface-level takes
+2. About something actively relevant to his work or projects right now (AI coding tools, fintech, front-end, startup building)
+3. About a personal passion where the piece goes deep (analog photography, music craft, Grateful Dead, film)
+4. Surprising, counterintuitive, or nuanced — pieces that challenge conventional thinking
+5. Timely but not just "trending" — news he'd actually act on or think about, not just noise
+
+Deprioritize:
+- Generic "AI will change everything" hot takes with no engineering depth
+- Mainstream tech business news he'd see everywhere (FAANG earnings, obvious product announcements)
+- Beginner tutorials or 101-level content
+- Pure SEO content farms`;
+
+  const userPrompt = `From the articles below, pick the 5 that this reader is most likely to stop and actually read.
+
+Return ONLY a JSON array of exactly 5 objects — no prose, no markdown fences:
+[{"index": <1-based number from the list>, "reason": "<1-2 sentences on what the piece covers, then one sentence on specifically why this reader would care>"}]
+
+Articles:
+${list}`;
+
   try {
     const upstream = await fetch("https://api.anthropic.com/v1/messages", {
       method: "POST",
@@ -28,17 +87,9 @@ export default async function handler(req, res) {
       },
       body: JSON.stringify({
         model: "claude-sonnet-4-6",
-        max_tokens: 800,
-        messages: [{
-          role: "user",
-          content: `You are a news editor for a senior engineering manager. From the articles below, pick the 5 most important or interesting ones. Criteria: technical depth, industry impact, or things that will matter in the next 6–12 months. Skip fluff, listicles, and sponsored content.
-
-Return ONLY a JSON array of exactly 5 objects with this shape (no prose, no markdown fences):
-[{"index": <1-based number from the list>, "reason": "<one tight sentence on why this matters>"}]
-
-Articles:
-${list}`,
-        }],
+        max_tokens: 1200,
+        system: systemPrompt,
+        messages: [{ role: "user", content: userPrompt }],
       }),
     });
 
@@ -48,7 +99,6 @@ ${list}`,
     }
 
     const raw = data.content?.find((b) => b.type === "text")?.text ?? "[]";
-    // Extract JSON array even if the model wraps it
     const match = raw.match(/\[[\s\S]*\]/);
     const picks = match ? JSON.parse(match[0]) : [];
 
