@@ -3,7 +3,7 @@ export default async function handler(req, res) {
     return res.status(405).json({ error: "Method not allowed" });
   }
 
-  const { articles } = req.body ?? {};
+  const { articles, preferences } = req.body ?? {};
   if (!Array.isArray(articles) || articles.length === 0) {
     return res.status(400).json({ error: "Missing articles array" });
   }
@@ -18,9 +18,9 @@ export default async function handler(req, res) {
     .map((a, i) => `${i + 1}. [${a.sourceName}] ${a.title} — ${a.excerpt?.slice(0, 120) ?? ""}`)
     .join("\n");
 
-  const systemPrompt = `You are a personal content curator for a specific reader. Your job is to evaluate a list of RSS articles and return the top 5 most relevant and interesting ones for this person — not the most popular, not the most recent, but the ones most likely to make them stop scrolling and actually read.
+  const systemPrompt = `You are a personal content curator. Your job is to evaluate a list of RSS articles and return the top 5 most relevant and interesting ones for the person you're curating for — not the most popular, not the most recent, but the ones most likely to make them stop scrolling and actually read.
 
-## Who this reader is
+## Who you're curating for
 
 **Professionally:**
 - Engineering manager at a fintech company building banking software for community banks and credit unions
@@ -31,8 +31,8 @@ export default async function handler(req, res) {
 - Building a startup: a reciprocity-based professional community platform targeting career pivoters, still in early validation/Mom Test phase
 - Also building personal projects: a personal scheduling tool (Skejjy) and a spelling practice app for his daughter
 
-**What he reads about in tech:**
-- AI and the future of software engineering — not hype pieces, but substantive takes from credible engineers (thinks about this the way Karpathy, Kent Beck, Yegge, and Fowler think about it)
+**What you read about in tech:**
+- AI and the future of software engineering — not hype pieces, but substantive takes from credible engineers (you think about this the way Karpathy, Kent Beck, Yegge, and Fowler think about it)
 - LLM capabilities, context windows, agent frameworks, prompt/context engineering
 - Fintech, banking infrastructure, community banking, credit union technology
 - Front-end web development, React ecosystem
@@ -58,21 +58,32 @@ export default async function handler(req, res) {
 
 Prioritize articles that are:
 1. Substantive and written for smart, experienced practitioners — not beginner explainers or surface-level takes
-2. About something actively relevant to his work or projects right now (AI coding tools, fintech, front-end, startup building)
+2. About something actively relevant to your work or projects right now (AI coding tools, fintech, front-end, startup building)
 3. About a personal passion where the piece goes deep (analog photography, music craft, Grateful Dead, film)
 4. Surprising, counterintuitive, or nuanced — pieces that challenge conventional thinking
-5. Timely but not just "trending" — news he'd actually act on or think about, not just noise
+5. Timely but not just "trending" — news you'd actually act on or think about, not just noise
 
 Deprioritize:
 - Generic "AI will change everything" hot takes with no engineering depth
-- Mainstream tech business news he'd see everywhere (FAANG earnings, obvious product announcements)
+- Mainstream tech business news you'd see everywhere (FAANG earnings, obvious product announcements)
 - Beginner tutorials or 101-level content
 - Pure SEO content farms`;
 
-  const userPrompt = `From the articles below, pick the 5 that this reader is most likely to stop and actually read.
+  const likedLines    = (preferences?.liked    ?? []).slice(0, 25).map(a => `- "${a.title}" (${a.sourceName})`).join("\n");
+  const dislikedLines = (preferences?.disliked ?? []).slice(0, 25).map(a => `- "${a.title}" (${a.sourceName})`).join("\n");
+
+  const prefSection = likedLines || dislikedLines ? `
+
+## Your recent signals
+${likedLines    ? `\nArticles you've liked recently:\n${likedLines}`    : ""}
+${dislikedLines ? `\nArticles you've disliked recently:\n${dislikedLines}` : ""}
+
+Use these as calibration: find more articles that match the pattern of what you liked, and avoid recommending articles that resemble what you disliked.` : "";
+
+  const userPrompt = `From the articles below, pick the 5 that are most likely to make you stop and actually read them.${prefSection}
 
 Return ONLY a JSON array of exactly 5 objects — no prose, no markdown fences:
-[{"index": <1-based number from the list>, "reason": "<1-2 sentences on what the piece covers, then one sentence on specifically why this reader would care>"}]
+[{"index": <1-based number from the list>, "reason": "<1-2 sentences on what the piece covers, then one sentence on specifically why you'd care about it>"}]
 
 Articles:
 ${list}`;

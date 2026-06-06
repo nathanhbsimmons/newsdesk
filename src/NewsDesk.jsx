@@ -10,9 +10,10 @@ const DEFAULT_SOURCES = [
   { id: "devto",      name: "Dev.to",            url: "https://dev.to/feed",                                  color: "#42A5F5" },
 ];
 
-const K_DIS = "nd-dismissed";
-const K_SRC = "nd-sources";
-const K_ART = "nd-articles";
+const K_DIS   = "nd-dismissed";
+const K_SRC   = "nd-sources";
+const K_ART   = "nd-articles";
+const K_PREFS = "nd-prefs";
 
 const C = {
   bg:      "#0b0d12",
@@ -42,8 +43,9 @@ export default function NewsDesk() {
   const [newName, setNewName]         = useState("");
   const [newUrl, setNewUrl]           = useState("");
   const [tick, setTick]               = useState(0);
-  const [digest, setDigest]           = useState(null);   // [{index, reason, article}]
+  const [digest, setDigest]           = useState(null);
   const [digestLoading, setDigestLoading] = useState(false);
+  const [prefs, setPrefs]             = useState({ liked: [], disliked: [] });
 
   useEffect(() => {
     const link = document.createElement("link");
@@ -77,6 +79,10 @@ export default function NewsDesk() {
     try {
       const a = localStorage.getItem(K_ART);
       if (a) { setArticles(JSON.parse(a)); setFetching(false); }
+    } catch {}
+    try {
+      const p = localStorage.getItem(K_PREFS);
+      if (p) setPrefs(JSON.parse(p));
     } catch {}
     setStorageOk(true);
   }, []);
@@ -140,6 +146,49 @@ export default function NewsDesk() {
     try { localStorage.setItem(K_DIS, JSON.stringify([...next])); } catch {}
   };
 
+  const savePrefs = (next) => {
+    setPrefs(next);
+    try { localStorage.setItem(K_PREFS, JSON.stringify(next)); } catch {}
+  };
+
+  const likeArticle = (article) => {
+    setPrefs(prev => {
+      const entry = { id: article.id, title: article.title, sourceName: article.sourceName, date: new Date().toISOString() };
+      const liked    = [entry, ...prev.liked.filter(a => a.id !== article.id)].slice(0, 50);
+      const disliked = prev.disliked.filter(a => a.id !== article.id);
+      const next = { liked, disliked };
+      try { localStorage.setItem(K_PREFS, JSON.stringify(next)); } catch {}
+      return next;
+    });
+  };
+
+  const dislikeArticle = (article) => {
+    setPrefs(prev => {
+      const entry = { id: article.id, title: article.title, sourceName: article.sourceName, date: new Date().toISOString() };
+      const disliked = [entry, ...prev.disliked.filter(a => a.id !== article.id)].slice(0, 50);
+      const liked    = prev.liked.filter(a => a.id !== article.id);
+      const next = { liked, disliked };
+      try { localStorage.setItem(K_PREFS, JSON.stringify(next)); } catch {}
+      return next;
+    });
+  };
+
+  const unlikeArticle = (id) => {
+    setPrefs(prev => {
+      const next = { ...prev, liked: prev.liked.filter(a => a.id !== id) };
+      try { localStorage.setItem(K_PREFS, JSON.stringify(next)); } catch {}
+      return next;
+    });
+  };
+
+  const undislikeArticle = (id) => {
+    setPrefs(prev => {
+      const next = { ...prev, disliked: prev.disliked.filter(a => a.id !== id) };
+      try { localStorage.setItem(K_PREFS, JSON.stringify(next)); } catch {}
+      return next;
+    });
+  };
+
   const summarize = async (article) => {
     if (summaries[article.id] || summarizing[article.id]) return;
     setSummarizing(p => ({ ...p, [article.id]: true }));
@@ -168,7 +217,7 @@ export default function NewsDesk() {
       const res = await fetch("/api/digest", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ articles: unread }),
+        body: JSON.stringify({ articles: unread, preferences: prefs }),
       });
       const data = await res.json();
       const picks = (data.picks ?? []).map(p => ({
@@ -215,6 +264,9 @@ export default function NewsDesk() {
     if (activeSrc && a.sourceId !== activeSrc) return false;
     return true;
   });
+
+  const likedIds    = new Set(prefs.liked.map(a => a.id));
+  const dislikedIds = new Set(prefs.disliked.map(a => a.id));
 
   return (
     <div style={{ display:"flex", height:"100vh", fontFamily:"'Noto Sans Nabataean',sans-serif", background:C.bg, color:C.text, overflow:"hidden" }}>
@@ -312,9 +364,15 @@ export default function NewsDesk() {
               summaries={summaries}
               summarizing={summarizing}
               expandedId={expandedId}
+              likedIds={likedIds}
+              dislikedIds={dislikedIds}
               onToggle={id => setExpandedId(expandedId === id ? null : id)}
               onSummarize={summarize}
               onDismiss={dismiss}
+              onLike={likeArticle}
+              onDislike={dislikeArticle}
+              onUnlike={unlikeArticle}
+              onUndislike={undislikeArticle}
             />
           ) : fetching && articles.length === 0 ? (
             <div style={{ display:"flex", justifyContent:"center", alignItems:"center", height:160, color:C.muted, fontSize:12, gap:8 }}>
@@ -333,10 +391,16 @@ export default function NewsDesk() {
               isExpanded={expandedId === article.id}
               summary={summaries[article.id]}
               isSummarizing={summarizing[article.id]}
+              isLiked={likedIds.has(article.id)}
+              isDisliked={dislikedIds.has(article.id)}
               onToggle={() => setExpandedId(expandedId === article.id ? null : article.id)}
               onSummarize={() => summarize(article)}
               onDismiss={() => dismiss(article.id)}
               onUndismiss={() => undismiss(article.id)}
+              onLike={() => likeArticle(article)}
+              onDislike={() => dislikeArticle(article)}
+              onUnlike={() => unlikeArticle(article.id)}
+              onUndislike={() => undislikeArticle(article.id)}
             />
           ))}
         </div>
@@ -345,7 +409,7 @@ export default function NewsDesk() {
   );
 }
 
-function DigestPanel({ digest, loading, dismissed, summaries, summarizing, expandedId, onToggle, onSummarize, onDismiss }) {
+function DigestPanel({ digest, loading, dismissed, summaries, summarizing, expandedId, likedIds, dislikedIds, onToggle, onSummarize, onDismiss, onLike, onDislike, onUnlike, onUndislike }) {
   if (loading) {
     return (
       <div style={{ display:"flex", flexDirection:"column", alignItems:"center", justifyContent:"center", height:220, gap:12 }}>
@@ -366,7 +430,7 @@ function DigestPanel({ digest, loading, dismissed, summaries, summarizing, expan
     <div>
       <div style={{ marginBottom:18, padding:"10px 14px", background:"rgba(167,139,250,0.06)", border:"1px solid rgba(167,139,250,0.18)", borderRadius:8 }}>
         <div style={{ fontSize:9, color:"#a78bfa", letterSpacing:"0.18em", textTransform:"uppercase", marginBottom:4 }}>▸ AI-curated · top 5 from {new Date().toLocaleDateString("en-US", { month:"short", day:"numeric" })}</div>
-        <div style={{ fontSize:11, color:"#4a5268", lineHeight:1.6 }}>Claude ranked these as the most impactful stories across your feeds right now.</div>
+        <div style={{ fontSize:11, color:"#4a5268", lineHeight:1.6 }}>Claude ranked these as the stories most likely to catch your attention right now.</div>
       </div>
       {visible.map((pick, i) => (
         <DigestCard
@@ -376,16 +440,22 @@ function DigestPanel({ digest, loading, dismissed, summaries, summarizing, expan
           isExpanded={expandedId === pick.article.id}
           summary={summaries[pick.article.id]}
           isSummarizing={summarizing[pick.article.id]}
+          isLiked={likedIds?.has(pick.article.id)}
+          isDisliked={dislikedIds?.has(pick.article.id)}
           onToggle={() => onToggle(pick.article.id)}
           onSummarize={() => onSummarize(pick.article)}
           onDismiss={() => onDismiss(pick.article.id)}
+          onLike={() => onLike(pick.article)}
+          onDislike={() => onDislike(pick.article)}
+          onUnlike={() => onUnlike(pick.article.id)}
+          onUndislike={() => onUndislike(pick.article.id)}
         />
       ))}
     </div>
   );
 }
 
-function DigestCard({ rank, pick, isExpanded, summary, isSummarizing, onToggle, onSummarize, onDismiss }) {
+function DigestCard({ rank, pick, isExpanded, summary, isSummarizing, isLiked, isDisliked, onToggle, onSummarize, onDismiss, onLike, onDislike, onUnlike, onUndislike }) {
   const { article, reason } = pick;
   const [hov, setHov] = useState(false);
   const [btnHov, setBtnHov] = useState(null);
@@ -441,12 +511,51 @@ function DigestCard({ rank, pick, isExpanded, summary, isSummarizing, onToggle, 
           style={{ ...actionBtn, color:"#e8874b", borderColor: btnHov === "sum" && !summary && !isSummarizing ? "#e8874b" : "rgba(232,135,75,0.3)", background: btnHov === "sum" && !summary && !isSummarizing ? "rgba(232,135,75,0.1)" : "none", opacity:(!!summary || isSummarizing) ? 0.55 : 1 }}>
           {isSummarizing ? "⟳ Thinking…" : summary ? "✓ Summarized" : "✦ AI Summary"}
         </button>
+        <LikeDislikeButtons
+          isLiked={isLiked} isDisliked={isDisliked}
+          onLike={onLike} onDislike={onDislike}
+          onUnlike={onUnlike} onUndislike={onUndislike}
+        />
         <button onClick={onDismiss}
           onMouseEnter={() => setBtnHov("dis")} onMouseLeave={() => setBtnHov(null)}
           style={{ ...actionBtn, marginLeft:"auto", color: btnHov === "dis" ? C.red : C.muted, borderColor: btnHov === "dis" ? C.red : "transparent" }}>
           ✕ Dismiss
         </button>
       </div>
+    </div>
+  );
+}
+
+function LikeDislikeButtons({ isLiked, isDisliked, onLike, onDislike, onUnlike, onUndislike }) {
+  const [hov, setHov] = useState(null);
+  return (
+    <div style={{ display:"flex", gap:3 }}>
+      <button
+        onClick={isLiked ? onUnlike : onLike}
+        onMouseEnter={() => setHov("like")} onMouseLeave={() => setHov(null)}
+        title={isLiked ? "Remove like" : "Like — trains your digest"}
+        style={{
+          ...actionBtn,
+          color: isLiked ? "#4ade80" : hov === "like" ? "#4ade80" : C.muted,
+          borderColor: isLiked ? "rgba(74,222,128,0.4)" : hov === "like" ? "rgba(74,222,128,0.3)" : "transparent",
+          background: isLiked ? "rgba(74,222,128,0.08)" : "none",
+          padding:"5px 8px",
+        }}>
+        ▲
+      </button>
+      <button
+        onClick={isDisliked ? onUndislike : onDislike}
+        onMouseEnter={() => setHov("dislike")} onMouseLeave={() => setHov(null)}
+        title={isDisliked ? "Remove dislike" : "Dislike — trains your digest"}
+        style={{
+          ...actionBtn,
+          color: isDisliked ? C.red : hov === "dislike" ? C.red : C.muted,
+          borderColor: isDisliked ? "rgba(224,82,82,0.4)" : hov === "dislike" ? "rgba(224,82,82,0.3)" : "transparent",
+          background: isDisliked ? "rgba(224,82,82,0.08)" : "none",
+          padding:"5px 8px",
+        }}>
+        ▼
+      </button>
     </div>
   );
 }
@@ -493,7 +602,7 @@ function NavItem({ active, onClick, color, label, count, isAll, isSpecial, error
   );
 }
 
-function ArticleCard({ article, isDismissed, isExpanded, summary, isSummarizing, onToggle, onSummarize, onDismiss, onUndismiss }) {
+function ArticleCard({ article, isDismissed, isExpanded, summary, isSummarizing, isLiked, isDisliked, onToggle, onSummarize, onDismiss, onUndismiss, onLike, onDislike, onUnlike, onUndislike }) {
   const [hov, setHov] = useState(false);
   const [btnHov, setBtnHov] = useState(null);
 
@@ -560,6 +669,11 @@ function ArticleCard({ article, isDismissed, isExpanded, summary, isSummarizing,
           style={{ ...actionBtn, color:"#e8874b", borderColor: btnHov === "sum" && !summary && !isSummarizing ? "#e8874b" : "rgba(232,135,75,0.3)", background: btnHov === "sum" && !summary && !isSummarizing ? "rgba(232,135,75,0.1)" : "none", opacity: (!!summary || isSummarizing) ? 0.55 : 1 }}>
           {isSummarizing ? "⟳ Thinking…" : summary ? "✓ Summarized" : "✦ AI Summary"}
         </button>
+        <LikeDislikeButtons
+          isLiked={isLiked} isDisliked={isDisliked}
+          onLike={onLike} onDislike={onDislike}
+          onUnlike={onUnlike} onUndislike={onUndislike}
+        />
         {isDismissed ? (
           <button onClick={onUndismiss}
             onMouseEnter={() => setBtnHov("restore")} onMouseLeave={() => setBtnHov(null)}
