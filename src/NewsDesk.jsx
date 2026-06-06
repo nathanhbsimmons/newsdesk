@@ -1,4 +1,5 @@
 import { useState, useEffect } from "react";
+import { strip, ago } from "./utils.js";
 
 const DEFAULT_SOURCES = [
   { id: "tldr",       name: "TLDR",             url: "https://tldr.tech/rss",                                color: "#4FC3F7" },
@@ -9,7 +10,6 @@ const DEFAULT_SOURCES = [
   { id: "devto",      name: "Dev.to",            url: "https://dev.to/feed",                                  color: "#42A5F5" },
 ];
 
-const RSS2JSON = "https://api.rss2json.com/v1/api.json?rss_url=";
 const K_DIS = "nd-dismissed";
 const K_SRC = "nd-sources";
 const K_ART = "nd-articles";
@@ -25,19 +25,6 @@ const C = {
   bright:  "#eef0f5",
   red:     "#e05252",
   green:   "#4caf7d",
-};
-
-const strip = (html = "") =>
-  html.replace(/<[^>]*>/g, " ").replace(/&amp;/g, "&").replace(/&lt;/g, "<")
-      .replace(/&gt;/g, ">").replace(/&nbsp;/g, " ").replace(/&#39;/g, "'")
-      .replace(/&quot;/g, '"').replace(/\s+/g, " ").trim();
-
-const ago = (d) => {
-  const s = Math.floor((Date.now() - new Date(d)) / 1000);
-  if (s < 60)    return "just now";
-  if (s < 3600)  return `${Math.floor(s / 60)}m ago`;
-  if (s < 86400) return `${Math.floor(s / 3600)}h ago`;
-  return `${Math.floor(s / 86400)}d ago`;
 };
 
 export default function NewsDesk() {
@@ -103,7 +90,7 @@ export default function NewsDesk() {
       const allFresh = [];
       await Promise.allSettled(sources.map(async (src) => {
         try {
-          const r = await fetch(`${RSS2JSON}${encodeURIComponent(src.url)}&count=25`);
+          const r = await fetch(`/api/feed?url=${encodeURIComponent(src.url)}`);
           const d = await r.json();
           if (!alive) return;
           if (d.status === "ok") {
