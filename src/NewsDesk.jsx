@@ -308,6 +308,7 @@ export default function NewsDesk() {
             <DigestPanel
               digest={digest}
               loading={digestLoading}
+              dismissed={dismissed}
               summaries={summaries}
               summarizing={summarizing}
               expandedId={expandedId}
@@ -344,7 +345,7 @@ export default function NewsDesk() {
   );
 }
 
-function DigestPanel({ digest, loading, summaries, summarizing, expandedId, onToggle, onSummarize, onDismiss }) {
+function DigestPanel({ digest, loading, dismissed, summaries, summarizing, expandedId, onToggle, onSummarize, onDismiss }) {
   if (loading) {
     return (
       <div style={{ display:"flex", flexDirection:"column", alignItems:"center", justifyContent:"center", height:220, gap:12 }}>
@@ -357,13 +358,17 @@ function DigestPanel({ digest, loading, summaries, summarizing, expandedId, onTo
   if (digest.length === 0) {
     return <div style={{ textAlign:"center", padding:60, color:"#4a5268", fontSize:12 }}>Could not generate digest. Try refreshing feeds first.</div>;
   }
+  const visible = dismissed ? digest.filter(pick => !dismissed.has(pick.article.id)) : digest;
+  if (visible.length === 0) {
+    return <div style={{ textAlign:"center", padding:60, color:"#4a5268", fontSize:12 }}>All digest articles dismissed.</div>;
+  }
   return (
     <div>
       <div style={{ marginBottom:18, padding:"10px 14px", background:"rgba(167,139,250,0.06)", border:"1px solid rgba(167,139,250,0.18)", borderRadius:8 }}>
         <div style={{ fontSize:9, color:"#a78bfa", letterSpacing:"0.18em", textTransform:"uppercase", marginBottom:4 }}>▸ AI-curated · top 5 from {new Date().toLocaleDateString("en-US", { month:"short", day:"numeric" })}</div>
         <div style={{ fontSize:11, color:"#4a5268", lineHeight:1.6 }}>Claude ranked these as the most impactful stories across your feeds right now.</div>
       </div>
-      {digest.map((pick, i) => (
+      {visible.map((pick, i) => (
         <DigestCard
           key={pick.article.id}
           rank={i + 1}
