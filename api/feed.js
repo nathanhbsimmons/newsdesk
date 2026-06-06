@@ -7,16 +7,29 @@ const PARSER_OPTIONS = {
   cdataPropName: "__cdata",
 };
 
+// Safely extract a string from any fast-xml-parser value:
+// plain string, { #text: "..." }, { __cdata: "..." }, or number.
+function text(val) {
+  if (val == null) return "";
+  if (typeof val === "string") return val;
+  if (typeof val === "number") return String(val);
+  // object with #text (element with attributes + text)
+  if (val["#text"] != null) return String(val["#text"]);
+  // object with __cdata (CDATA section)
+  if (val["__cdata"] != null) return String(val["__cdata"]);
+  return "";
+}
+
 export function parseItems(parsed) {
   // RSS 2.0
   if (parsed?.rss?.channel) {
     const raw = [].concat(parsed.rss.channel.item ?? []);
     return raw.map((item) => ({
-      title:       String(item.title?.["#text"] ?? item.title ?? ""),
-      link:        String(item.link ?? item.guid?.["#text"] ?? item.guid ?? ""),
-      guid:        String(item.guid?.["#text"] ?? item.guid ?? item.link ?? ""),
-      description: String(item["content:encoded"] ?? item.description?.["__cdata"] ?? item.description ?? ""),
-      pubDate:     String(item.pubDate ?? ""),
+      title:       text(item.title),
+      link:        text(item.link) || text(item.guid),
+      guid:        text(item.guid) || text(item.link),
+      description: text(item["content:encoded"]) || text(item.description),
+      pubDate:     text(item.pubDate),
     }));
   }
 
@@ -28,13 +41,13 @@ export function parseItems(parsed) {
       const href =
         links.find((l) => l["@_rel"] === "alternate")?.["@_href"] ??
         links[0]?.["@_href"] ??
-        String(entry.link ?? "");
+        text(entry.link);
       return {
-        title:       String(entry.title?.["#text"] ?? entry.title ?? ""),
-        link:        href,
-        guid:        String(entry.id ?? href ?? ""),
-        description: String(entry.content?.["#text"] ?? entry.content ?? entry.summary?.["#text"] ?? entry.summary ?? ""),
-        pubDate:     String(entry.published ?? entry.updated ?? ""),
+        title:       text(entry.title),
+        link:        href ?? "",
+        guid:        text(entry.id) || href || "",
+        description: text(entry.content) || text(entry.summary),
+        pubDate:     text(entry.published) || text(entry.updated),
       };
     });
   }

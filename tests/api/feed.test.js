@@ -199,6 +199,25 @@ describe("GET /api/feed — upstream fetch", () => {
     await handler(makeReq({ url: "https://example.com/rss" }), res);
     const item = res.json.mock.calls[0][0].items[0];
     expect(item.description).toContain("Rich content here");
+    expect(item.description).not.toBe("[object Object]");
+  });
+
+  it("handles CDATA in title (never returns [object Object])", async () => {
+    const xml = `<?xml version="1.0"?><rss version="2.0"><channel>
+      <item>
+        <title><![CDATA[Title with CDATA]]></title>
+        <link>https://example.com/c</link>
+        <guid>g-c</guid>
+        <description>desc</description>
+        <pubDate>Mon, 01 Jan 2024 12:00:00 GMT</pubDate>
+      </item>
+    </channel></rss>`;
+    fetch.mockResolvedValueOnce({ ok: true, text: () => Promise.resolve(xml) });
+    const res = makeRes();
+    await handler(makeReq({ url: "https://example.com/rss" }), res);
+    const item = res.json.mock.calls[0][0].items[0];
+    expect(item.title).toBe("Title with CDATA");
+    expect(item.title).not.toBe("[object Object]");
   });
 
   it("prefers content:encoded over description when present", async () => {
