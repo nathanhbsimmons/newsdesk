@@ -221,9 +221,12 @@ export default function NewsDesk() {
 
       {/* ── SIDEBAR ── */}
       <aside style={{ width:230, minWidth:230, background:C.surface, borderRight:`1px solid ${C.border}`, display:"flex", flexDirection:"column", overflow:"hidden" }}>
-        <div style={{ padding:"20px 16px 14px", borderBottom:`1px solid ${C.border}` }}>
-          <div style={{ fontSize:9, color:C.accent, letterSpacing:"0.2em", textTransform:"uppercase" }}>▸ rss reader</div>
-          <div style={{ fontSize:21, color:C.bright, fontWeight:600, letterSpacing:"-0.03em", marginTop:3 }}>NewsDesk</div>
+        <div style={{ padding:"20px 16px 14px", borderBottom:`1px solid ${C.border}`, display:"flex", alignItems:"center" }}>
+          <div style={{ flex:1 }}>
+            <div style={{ fontSize:9, color:C.accent, letterSpacing:"0.2em", textTransform:"uppercase" }}>▸ rss reader</div>
+            <div style={{ fontSize:21, color:C.bright, fontWeight:600, letterSpacing:"-0.03em", marginTop:3 }}>NewsDesk</div>
+          </div>
+          <img src="/favicon.svg" alt="" width="34" height="34" style={{ opacity:0.9, flexShrink:0 }} />
         </div>
 
         <nav style={{ padding:"10px 8px", flex:1, overflowY:"auto" }}>
