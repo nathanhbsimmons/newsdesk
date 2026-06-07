@@ -21,11 +21,21 @@ async function fetchPageContent(link) {
     });
     if (!r.ok) return "";
     const html = await r.text();
-    // Extract main content heuristically: prefer <article> or <main>, else <body>
-    const articleMatch = html.match(/<article[^>]*>([\s\S]*?)<\/article>/i);
+
+    // If the page has multiple <article> blocks (newsletter digest), collect all
+    // non-sponsor ones and join them.
+    const articleBlocks = [...html.matchAll(/<article[^>]*>([\s\S]*?)<\/article>/gi)]
+      .map(m => m[1])
+      .filter(block => !block.includes("(Sponsor)"));
+
+    if (articleBlocks.length > 1) {
+      return articleBlocks.map(stripHtml).filter(t => t.length > 30).join("\n\n").slice(0, 3500);
+    }
+
+    // Single article or fallback: prefer <main>, then <body>
     const mainMatch = html.match(/<main[^>]*>([\s\S]*?)<\/main>/i);
     const bodyMatch = html.match(/<body[^>]*>([\s\S]*?)<\/body>/i);
-    const raw = articleMatch?.[1] ?? mainMatch?.[1] ?? bodyMatch?.[1] ?? html;
+    const raw = articleBlocks[0] ?? mainMatch?.[1] ?? bodyMatch?.[1] ?? html;
     return stripHtml(raw).slice(0, 3000);
   } catch {
     return "";
@@ -53,8 +63,12 @@ export default async function handler(req, res) {
     articleContent = await fetchPageContent(link);
   }
 
+  // A title with commas/multiple topics signals a newsletter digest rather than a single article.
+  const isDigest = (title.match(/,/g) ?? []).length >= 2;
   const userMessage = articleContent
-    ? `Summarize this tech article in 2-3 tight sentences. No preamble. Written for an engineering manager who wants the key insight fast.\n\nTitle: ${title}\n\nContent: ${articleContent}`
+    ? isDigest
+      ? `This is a tech newsletter digest covering multiple stories. Briefly summarize the 2-3 most important stories from the content below in 2-3 sentences total. No preamble. Written for an engineering manager.\n\nIssue title: ${title}\n\nContent: ${articleContent}`
+      : `Summarize this tech article in 2-3 tight sentences. No preamble. Written for an engineering manager who wants the key insight fast.\n\nTitle: ${title}\n\nContent: ${articleContent}`
     : `Summarize what this tech article is likely about based on its title in 2-3 tight sentences. No preamble. Written for an engineering manager.\n\nTitle: ${title}`;
 
   try {
