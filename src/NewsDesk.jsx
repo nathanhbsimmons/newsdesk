@@ -1,5 +1,18 @@
 import { useState, useEffect } from "react";
 import { strip, ago } from "./utils.js";
+import MobileApp from "./MobileNewsDesk.jsx";
+
+function useIsMobile() {
+  const [isMobile, setIsMobile] = useState(
+    typeof window !== "undefined" && window.innerWidth <= 768
+  );
+  useEffect(() => {
+    const handler = () => setIsMobile(window.innerWidth <= 768);
+    window.addEventListener("resize", handler);
+    return () => window.removeEventListener("resize", handler);
+  }, []);
+  return isMobile;
+}
 
 const DEFAULT_SOURCES = [
   { id: "tldr",       name: "TLDR",             url: "https://tldr.tech/rss",                                color: "#4FC3F7" },
@@ -257,6 +270,48 @@ export default function NewsDesk() {
   };
 
   const countFor = (id) => articles.filter(a => (!id || a.sourceId === id) && !dismissed.has(a.id)).length;
+
+  const isMobile = useIsMobile();
+  if (isMobile) {
+    return (
+      <MobileApp
+        sources={sources}
+        articles={articles}
+        dismissed={dismissed}
+        srcStatus={srcStatus}
+        fetching={fetching}
+        activeSrc={activeSrc}
+        setActiveSrc={setActiveSrc}
+        showDismissed={showDismissed}
+        setShowDismissed={setShowDismissed}
+        summaries={summaries}
+        summarizing={summarizing}
+        expandedId={expandedId}
+        setExpandedId={setExpandedId}
+        showAdd={showAdd}
+        setShowAdd={setShowAdd}
+        newName={newName}
+        setNewName={setNewName}
+        newUrl={newUrl}
+        setNewUrl={setNewUrl}
+        digest={digest}
+        digestLoading={digestLoading}
+        prefs={prefs}
+        onAddSource={addSource}
+        onRemoveSource={removeSource}
+        onRefresh={() => setTick(t => t + 1)}
+        onDismiss={dismiss}
+        onUndismiss={undismiss}
+        onLike={likeArticle}
+        onDislike={dislikeArticle}
+        onUnlike={unlikeArticle}
+        onUndislike={undislikeArticle}
+        onSummarize={summarize}
+        onRunDigest={runDigest}
+        countFor={countFor}
+      />
+    );
+  }
 
   const visible = articles.filter(a => {
     if (showDismissed) return dismissed.has(a.id);
