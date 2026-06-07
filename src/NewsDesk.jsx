@@ -526,8 +526,34 @@ function DigestCard({ rank, pick, isExpanded, summary, isSummarizing, isLiked, i
   );
 }
 
+function SignalFull({ color }) {
+  return (
+    <svg width="16" height="13" viewBox="0 0 16 13" fill={color} style={{ display:"block" }}>
+      <rect x="0"    y="9" width="3"   height="4"  rx="0.5"/>
+      <rect x="4.5"  y="6" width="3"   height="7"  rx="0.5"/>
+      <rect x="9"    y="3" width="3"   height="10" rx="0.5"/>
+      <rect x="13.5" y="0" width="2.5" height="13" rx="0.5"/>
+    </svg>
+  );
+}
+
+function SignalLow({ color }) {
+  return (
+    <svg width="16" height="13" viewBox="0 0 16 13" style={{ display:"block" }}>
+      <rect x="0"    y="9" width="3"   height="4"  rx="0.5" fill={color}/>
+      <rect x="4.5"  y="6" width="3"   height="7"  rx="0.5" fill={color} opacity="0.2"/>
+      <rect x="9"    y="3" width="3"   height="10" rx="0.5" fill={color} opacity="0.2"/>
+      <rect x="13.5" y="0" width="2.5" height="13" rx="0.5" fill={color} opacity="0.2"/>
+    </svg>
+  );
+}
+
 function LikeDislikeButtons({ isLiked, isDisliked, onLike, onDislike, onUnlike, onUndislike }) {
   const [hov, setHov] = useState(null);
+
+  const likeColor    = isLiked    ? "#4ade80" : hov === "like"    ? "#4ade80" : C.muted;
+  const dislikeColor = isDisliked ? "#e05252" : hov === "dislike" ? "#e05252" : C.muted;
+
   return (
     <div style={{ display:"flex", gap:3 }}>
       <button
@@ -536,12 +562,12 @@ function LikeDislikeButtons({ isLiked, isDisliked, onLike, onDislike, onUnlike, 
         title={isLiked ? "Remove like" : "Like — trains your digest"}
         style={{
           ...actionBtn,
-          color: isLiked ? "#4ade80" : hov === "like" ? "#4ade80" : C.muted,
+          display:"flex", alignItems:"center", justifyContent:"center",
           borderColor: isLiked ? "rgba(74,222,128,0.4)" : hov === "like" ? "rgba(74,222,128,0.3)" : "transparent",
-          background: isLiked ? "rgba(74,222,128,0.08)" : "none",
+          background:  isLiked ? "rgba(74,222,128,0.08)" : "none",
           padding:"5px 8px",
         }}>
-        ▲
+        <SignalFull color={likeColor} />
       </button>
       <button
         onClick={isDisliked ? onUndislike : onDislike}
@@ -549,12 +575,12 @@ function LikeDislikeButtons({ isLiked, isDisliked, onLike, onDislike, onUnlike, 
         title={isDisliked ? "Remove dislike" : "Dislike — trains your digest"}
         style={{
           ...actionBtn,
-          color: isDisliked ? C.red : hov === "dislike" ? C.red : C.muted,
+          display:"flex", alignItems:"center", justifyContent:"center",
           borderColor: isDisliked ? "rgba(224,82,82,0.4)" : hov === "dislike" ? "rgba(224,82,82,0.3)" : "transparent",
-          background: isDisliked ? "rgba(224,82,82,0.08)" : "none",
+          background:  isDisliked ? "rgba(224,82,82,0.08)" : "none",
           padding:"5px 8px",
         }}>
-        ▼
+        <SignalLow color={dislikeColor} />
       </button>
     </div>
   );
