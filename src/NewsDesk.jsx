@@ -196,7 +196,7 @@ export default function NewsDesk() {
       const res = await fetch("/api/summarize", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ title: article.title, content: article.content }),
+        body: JSON.stringify({ title: article.title, content: article.content, link: article.link }),
       });
       const data = await res.json();
       setSummaries(p => ({ ...p, [article.id]: data.summary || data.error || "Failed to summarize." }));
