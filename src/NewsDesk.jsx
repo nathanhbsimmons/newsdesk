@@ -57,6 +57,7 @@ export default function NewsDesk() {
   const [storageOk, setStorageOk]     = useState(false);
   const [activeSrc, setActiveSrc]     = useState(null);
   const [showDismissed, setShowDismissed] = useState(false);
+  const [showBlocked, setShowBlocked]   = useState(false);
   const [showDigest, setShowDigest]   = useState(false);
   const [summaries, setSummaries]     = useState({});
   const [summarizing, setSummarizing] = useState({});
@@ -180,6 +181,18 @@ export default function NewsDesk() {
     try { localStorage.setItem(K_BLOCKED, JSON.stringify([...next])); } catch {}
   };
 
+  const unblockDomain = (domain) => {
+    const next = new Set([...blocked]);
+    next.delete(domain);
+    setBlocked(next);
+    try { localStorage.setItem(K_BLOCKED, JSON.stringify([...next])); } catch {}
+  };
+
+  const clearAllDismissed = () => {
+    setDismissed(new Set());
+    try { localStorage.setItem(K_DIS, JSON.stringify([])); } catch {}
+  };
+
   const savePrefs = (next) => {
     setPrefs(next);
     try { localStorage.setItem(K_PREFS, JSON.stringify(next)); } catch {}
@@ -270,6 +283,7 @@ export default function NewsDesk() {
     setShowDigest(true);
     setActiveSrc(null);
     setShowDismissed(false);
+    setShowBlocked(false);
     if (!digest && !digestLoading) runDigest();
   };
 
@@ -332,6 +346,8 @@ export default function NewsDesk() {
         onDismiss={dismiss}
         onUndismiss={undismiss}
         onBlock={blockDomain}
+        onUnblock={unblockDomain}
+        onClearDismissed={clearAllDismissed}
         onLike={likeArticle}
         onDislike={dislikeArticle}
         onUnlike={unlikeArticle}
@@ -378,8 +394,8 @@ export default function NewsDesk() {
           />
           <div style={{ height:1, background:C.border, margin:"6px 8px" }} />
           <NavItem
-            active={!activeSrc && !showDismissed && !showDigest}
-            onClick={() => { setActiveSrc(null); setShowDismissed(false); setShowDigest(false); }}
+            active={!activeSrc && !showDismissed && !showDigest && !showBlocked}
+            onClick={() => { setActiveSrc(null); setShowDismissed(false); setShowDigest(false); setShowBlocked(false); }}
             color={C.accent} label="All sources" count={countFor(null)} isAll
           />
           <div style={{ height:1, background:C.border, margin:"6px 8px" }} />
@@ -387,7 +403,7 @@ export default function NewsDesk() {
             <NavItem
               key={src.id}
               active={activeSrc === src.id}
-              onClick={() => { setActiveSrc(src.id); setShowDismissed(false); setShowDigest(false); }}
+              onClick={() => { setActiveSrc(src.id); setShowDismissed(false); setShowDigest(false); setShowBlocked(false); }}
               color={src.color} label={src.name} count={countFor(src.id)}
               error={srcStatus[src.id] === "error"}
               onRemove={() => removeSource(src.id)}
@@ -396,9 +412,16 @@ export default function NewsDesk() {
           <div style={{ height:1, background:C.border, margin:"6px 8px" }} />
           <NavItem
             active={showDismissed}
-            onClick={() => { setShowDismissed(true); setActiveSrc(null); setShowDigest(false); }}
+            onClick={() => { setShowDismissed(true); setActiveSrc(null); setShowDigest(false); setShowBlocked(false); }}
             color={C.muted} label="Dismissed" count={dismissed.size}
           />
+          {blocked.size > 0 && (
+            <NavItem
+              active={showBlocked}
+              onClick={() => { setShowBlocked(true); setShowDismissed(false); setActiveSrc(null); setShowDigest(false); }}
+              color={C.red} label="Blocked" count={blocked.size}
+            />
+          )}
         </nav>
 
         <div style={{ padding:"10px 8px", borderTop:`1px solid ${C.border}`, display:"flex", flexDirection:"column", gap:6 }}>
@@ -424,27 +447,38 @@ export default function NewsDesk() {
           {showDigest ? (
             <>
               <span style={{ fontSize:11, color:"#a78bfa", background:"rgba(167,139,250,0.12)", border:"1px solid rgba(167,139,250,0.3)", padding:"3px 12px", borderRadius:20 }}>
-                ✦ top 5 digest
+                ✦ Top 5 Digest
               </span>
               {!digestLoading && digest && (
                 <button onClick={runDigest} style={{ ...btnBase, fontSize:10, color:C.muted, padding:"2px 8px" }}>↻ Regenerate</button>
               )}
             </>
+          ) : showBlocked ? (
+            <span style={{ fontSize:11, color:C.red, background:"rgba(224,82,82,0.1)", border:`1px solid rgba(224,82,82,0.3)`, padding:"3px 12px", borderRadius:20 }}>
+              ⊘ Blocked domains
+            </span>
           ) : (
             <>
               <span style={{ fontSize:11, color:C.bright, background:"rgba(232,135,75,0.15)", border:"1px solid rgba(232,135,75,0.3)", padding:"3px 12px", borderRadius:20 }}>
                 {fetching && articles.length === 0 ? "loading…" : `${countFor(activeSrc)} unread`}
               </span>
               {activeSrc && <span style={{ fontSize:11, color: sources.find(s => s.id === activeSrc)?.color }}>/ {sources.find(s => s.id === activeSrc)?.name}</span>}
-              {showDismissed && <span style={{ fontSize:11, color:C.muted }}>/ dismissed</span>}
+              {showDismissed && <span style={{ fontSize:11, color:C.muted }}>/ Dismissed</span>}
               {fetching && articles.length > 0 && <span style={{ fontSize:10, color:C.muted, animation:"pulse 1.2s ease-in-out infinite" }}>refreshing…</span>}
             </>
+          )}
+          {showDismissed && dismissed.size > 0 && (
+            <button onClick={clearAllDismissed} style={{ ...btnBase, fontSize:10, color:C.red, borderColor:"rgba(224,82,82,0.3)", padding:"2px 8px" }}>
+              Clear all
+            </button>
           )}
           <span style={{ marginLeft:"auto", fontSize:10, color:C.muted }}>articles persist until dismissed</span>
         </div>
 
         <div style={{ flex:1, overflowY:"auto", padding:"16px 20px" }}>
-          {showDigest ? (
+          {showBlocked ? (
+            <BlockedPanel blocked={blocked} onUnblock={unblockDomain} />
+          ) : showDigest ? (
             <DigestPanel
               digest={digest}
               loading={digestLoading}
@@ -834,6 +868,30 @@ function ArticleCard({ article, isDismissed, isExpanded, summary, isSummarizing,
           </>
         )}
       </div>
+    </div>
+  );
+}
+
+function BlockedPanel({ blocked, onUnblock }) {
+  const domains = [...blocked].sort();
+  if (domains.length === 0) {
+    return <div style={{ textAlign:"center", padding:60, color:"#4a5268", fontSize:12 }}>No blocked domains.</div>;
+  }
+  return (
+    <div>
+      <div style={{ marginBottom:14, padding:"10px 14px", background:"rgba(224,82,82,0.06)", border:"1px solid rgba(224,82,82,0.18)", borderRadius:8 }}>
+        <div style={{ fontSize:9, color:"#e05252", letterSpacing:"0.18em", textTransform:"uppercase", marginBottom:4 }}>▸ Blocked domains</div>
+        <div style={{ fontSize:11, color:"#4a5268", lineHeight:1.6 }}>Articles from these domains are hidden. Click Unblock to restore them.</div>
+      </div>
+      {domains.map(domain => (
+        <div key={domain} style={{ display:"flex", alignItems:"center", gap:10, padding:"11px 14px", background:"#12151c", borderRadius:7, marginBottom:6, border:"1px solid #1e2230" }}>
+          <span style={{ flex:1, fontSize:12, color:"#c8cdd8", fontFamily:"'Noto Sans Nabataean',sans-serif" }}>{domain}</span>
+          <button onClick={() => onUnblock(domain)}
+            style={{ background:"none", border:"1px solid rgba(224,82,82,0.35)", color:"#e05252", fontFamily:"'Noto Sans Nabataean',sans-serif", fontSize:10, padding:"4px 10px", borderRadius:4, cursor:"pointer" }}>
+            Unblock
+          </button>
+        </div>
+      ))}
     </div>
   );
 }

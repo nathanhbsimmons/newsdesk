@@ -472,9 +472,10 @@ function MobileDigestView({ digest, loading, dismissed, summaries, summarizing, 
 }
 
 // ── Sources management tab ───────────────────────────────────────────────────
-function MobileSourcesView({ sources, srcStatus, onRemove,
+function MobileSourcesView({ sources, srcStatus, onRemove, blocked, onUnblock,
                              showAdd, setShowAdd, newName, setNewName,
                              newUrl, setNewUrl, onAdd, onRefresh }) {
+  const blockedList = blocked ? [...blocked].sort() : [];
   return (
     <div style={{ flex: 1, overflowY: "auto", WebkitOverflowScrolling: "touch" }}>
       {/* Source list */}
@@ -519,6 +520,24 @@ function MobileSourcesView({ sources, srcStatus, onRemove,
           </>
         )}
       </div>
+
+      {/* Blocked domains */}
+      {blockedList.length > 0 && (
+        <div style={{ padding: "0 16px 16px" }}>
+          <div style={{ fontSize: 9, color: MC.red, letterSpacing: "0.14em", textTransform: "uppercase", marginBottom: 8, fontFamily: "'Noto Sans Nabataean', sans-serif" }}>
+            ⊘ Blocked domains
+          </div>
+          {blockedList.map(domain => (
+            <div key={domain} style={{ display: "flex", alignItems: "center", gap: 10, padding: "11px 13px", background: MC.surf, borderRadius: 8, marginBottom: 6, border: `1px solid ${MC.border}` }}>
+              <span style={{ flex: 1, fontSize: 13, color: MC.text, fontFamily: "'Noto Sans Nabataean', sans-serif" }}>{domain}</span>
+              <button onClick={() => onUnblock(domain)}
+                style={{ background: "none", border: "1px solid rgba(224,82,82,0.35)", color: MC.red, fontFamily: "'Noto Sans Nabataean', sans-serif", fontSize: 12, padding: "5px 12px", borderRadius: 6, cursor: "pointer" }}>
+                Unblock
+              </button>
+            </div>
+          ))}
+        </div>
+      )}
     </div>
   );
 }
@@ -596,7 +615,7 @@ export default function MobileApp({
   showAdd, setShowAdd, newName, setNewName, newUrl, setNewUrl,
   digest, digestLoading, prefs,
   onAddSource, onRemoveSource, onRefresh,
-  onDismiss, onUndismiss, onBlock,
+  onDismiss, onUndismiss, onBlock, onUnblock, onClearDismissed,
   onLike, onDislike, onUnlike, onUndislike,
   onSummarize, onRunDigest, countFor,
 }) {
@@ -645,6 +664,14 @@ export default function MobileApp({
             }}
           />
           <div style={{ flex: 1, overflowY: "auto", WebkitOverflowScrolling: "touch" }}>
+            {showDismissed && dismissed.size > 0 && (
+              <div style={{ display: "flex", justifyContent: "flex-end", padding: "8px 14px 2px" }}>
+                <button onClick={onClearDismissed}
+                  style={{ ...mBtn, width: "auto", padding: "7px 14px", fontSize: 12, color: MC.red, borderColor: "rgba(224,82,82,0.3)" }}>
+                  Clear all
+                </button>
+              </div>
+            )}
             {fetching && articles.length === 0 ? (
               <div style={{ display: "flex", justifyContent: "center", alignItems: "center", height: 160, gap: 8, color: MC.muted, fontSize: 12, fontFamily: "'Noto Sans Nabataean', sans-serif" }}>
                 <span style={{ width: 14, height: 14, borderRadius: "50%", border: "2px solid #1e2230", borderTopColor: MC.accent, display: "inline-block", animation: "spin 0.7s linear infinite" }} />
@@ -699,6 +726,7 @@ export default function MobileApp({
       {tab === "sources" && (
         <MobileSourcesView
           sources={sources} srcStatus={srcStatus} onRemove={onRemoveSource}
+          blocked={blocked} onUnblock={onUnblock}
           showAdd={showAdd} setShowAdd={setShowAdd}
           newName={newName} setNewName={setNewName}
           newUrl={newUrl}   setNewUrl={setNewUrl}
