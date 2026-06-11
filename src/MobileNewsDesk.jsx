@@ -20,6 +20,10 @@ function LoadingDots() {
 }
 import { ago } from "./utils.js";
 
+const getDomain = (url) => {
+  try { return new URL(url).hostname.replace(/^www\./, ""); } catch { return null; }
+};
+
 // ── Design tokens (mirrors desktop C object) ────────────────────────────────
 const MC = {
   bg:     "#0b0d12",
@@ -59,6 +63,18 @@ const rowBtn = {
   fontFamily: "'Noto Sans Nabataean', sans-serif", fontSize: 12,
   gap: 4, whiteSpace: "nowrap", flexShrink: 0,
 };
+
+// ── Block icon ───────────────────────────────────────────────────────────────
+function BlockIcon({ size = 14, color }) {
+  return (
+    <svg width={size} height={size} viewBox="0 0 14 14" fill="none"
+         stroke={color} strokeWidth="1.6" strokeLinecap="round"
+         style={{ display: "block", flexShrink: 0 }}>
+      <circle cx="7" cy="7" r="5.8" />
+      <line x1="2.9" y1="2.9" x2="11.1" y2="11.1" />
+    </svg>
+  );
+}
 
 // ── Signal bar SVG icons ────────────────────────────────────────────────────
 function SignalFull({ color }) {
@@ -218,7 +234,7 @@ function MobileSourcePills({ sources, activeSrc, showDismissed, countFor, onSele
 
 // ── Shared card action strip ────────────────────────────────────────────────
 function CardActions({ article, isDismissed, summary, isSummarizing, isLiked, isDisliked,
-                       onSummarize, onDismiss, onUndismiss, onLike, onDislike, onUnlike, onUndislike }) {
+                       onSummarize, onDismiss, onUndismiss, onBlock, onLike, onDislike, onUnlike, onUndislike }) {
   return (
     <div style={{ display: "flex", alignItems: "center", padding: "4px 12px 10px", gap: 4 }}>
       <a
@@ -250,10 +266,16 @@ function CardActions({ article, isDismissed, summary, isSummarizing, isLiked, is
           ↩
         </button>
       ) : (
-        <button onClick={onDismiss}
-          style={{ ...iconBtn, width: 33, height: 33, color: MC.muted, fontSize: 15, fontFamily: "inherit" }}>
-          ✕
-        </button>
+        <>
+          <button onClick={onBlock}
+            style={{ ...iconBtn, width: 33, height: 33 }}>
+            <BlockIcon size={14} color={MC.red} />
+          </button>
+          <button onClick={onDismiss}
+            style={{ ...iconBtn, width: 33, height: 33, color: MC.muted, fontSize: 15, fontFamily: "inherit" }}>
+            ✕
+          </button>
+        </>
       )}
     </div>
   );
@@ -262,7 +284,7 @@ function CardActions({ article, isDismissed, summary, isSummarizing, isLiked, is
 // ── Feed article card ────────────────────────────────────────────────────────
 function MobileFeedCard({ article, isDismissed, isExpanded, summary, isSummarizing,
                           isLiked, isDisliked, onToggle, onSummarize,
-                          onDismiss, onUndismiss, onLike, onDislike, onUnlike, onUndislike }) {
+                          onDismiss, onUndismiss, onBlock, onLike, onDislike, onUnlike, onUndislike }) {
   return (
     <div style={{ background: MC.surf, borderBottom: `1px solid ${MC.border}`, opacity: isDismissed ? 0.55 : 1 }}>
       {/* Tap header */}
@@ -324,6 +346,7 @@ function MobileFeedCard({ article, isDismissed, isExpanded, summary, isSummarizi
         summary={summary} isSummarizing={isSummarizing}
         isLiked={isLiked} isDisliked={isDisliked}
         onSummarize={onSummarize} onDismiss={onDismiss} onUndismiss={onUndismiss}
+        onBlock={onBlock}
         onLike={onLike} onDislike={onDislike} onUnlike={onUnlike} onUndislike={onUndislike}
       />
     </div>
@@ -333,7 +356,7 @@ function MobileFeedCard({ article, isDismissed, isExpanded, summary, isSummarizi
 // ── Digest article card ──────────────────────────────────────────────────────
 function MobileDigestCard({ rank, pick, isExpanded, summary, isSummarizing,
                             isLiked, isDisliked, onToggle, onSummarize,
-                            onDismiss, onLike, onDislike, onUnlike, onUndislike }) {
+                            onDismiss, onBlock, onLike, onDislike, onUnlike, onUndislike }) {
   const { article, reason } = pick;
   return (
     <div style={{ background: MC.surf, borderBottom: `1px solid ${MC.border}` }}>
@@ -375,6 +398,7 @@ function MobileDigestCard({ rank, pick, isExpanded, summary, isSummarizing,
         summary={summary} isSummarizing={isSummarizing}
         isLiked={isLiked} isDisliked={isDisliked}
         onSummarize={onSummarize} onDismiss={onDismiss} onUndismiss={() => {}}
+        onBlock={onBlock}
         onLike={onLike} onDislike={onDislike} onUnlike={onUnlike} onUndislike={onUndislike}
       />
     </div>
@@ -383,7 +407,7 @@ function MobileDigestCard({ rank, pick, isExpanded, summary, isSummarizing,
 
 // ── Digest tab ───────────────────────────────────────────────────────────────
 function MobileDigestView({ digest, loading, dismissed, summaries, summarizing, expandedId,
-                            likedIds, dislikedIds, onToggle, onSummarize, onDismiss,
+                            likedIds, dislikedIds, onToggle, onSummarize, onDismiss, onBlock,
                             onLike, onDislike, onUnlike, onUndislike, onRegenerate }) {
   if (loading) {
     return (
@@ -436,6 +460,7 @@ function MobileDigestView({ digest, loading, dismissed, summaries, summarizing, 
           onToggle={() => onToggle(pick.article.id)}
           onSummarize={() => onSummarize(pick.article)}
           onDismiss={() => onDismiss(pick.article.id)}
+          onBlock={() => onBlock(pick.article.link)}
           onLike={() => onLike(pick.article)}
           onDislike={() => onDislike(pick.article)}
           onUnlike={() => onUnlike(pick.article.id)}
@@ -565,13 +590,13 @@ function MobileBottomNav({ tab, onTab }) {
 // ── Root mobile component ────────────────────────────────────────────────────
 // Receives all state + handler props from the parent NewsDesk component.
 export default function MobileApp({
-  sources, articles, dismissed, srcStatus, fetching,
+  sources, articles, dismissed, blocked, srcStatus, fetching,
   activeSrc, setActiveSrc, showDismissed, setShowDismissed,
   summaries, summarizing, expandedId, setExpandedId,
   showAdd, setShowAdd, newName, setNewName, newUrl, setNewUrl,
   digest, digestLoading, prefs,
   onAddSource, onRemoveSource, onRefresh,
-  onDismiss, onUndismiss,
+  onDismiss, onUndismiss, onBlock,
   onLike, onDislike, onUnlike, onUndislike,
   onSummarize, onRunDigest, countFor,
 }) {
@@ -588,6 +613,7 @@ export default function MobileApp({
   const visible = articles.filter(a => {
     if (showDismissed) return dismissed.has(a.id);
     if (dismissed.has(a.id)) return false;
+    if (blocked && blocked.has(getDomain(a.link))) return false;
     if (activeSrc && a.sourceId !== activeSrc) return false;
     return true;
   });
@@ -643,6 +669,7 @@ export default function MobileApp({
                   onSummarize={() => onSummarize(article)}
                   onDismiss={() => onDismiss(article.id)}
                   onUndismiss={() => onUndismiss(article.id)}
+                  onBlock={() => onBlock(article.link)}
                   onLike={() => onLike(article)}
                   onDislike={() => onDislike(article)}
                   onUnlike={() => onUnlike(article.id)}
@@ -661,7 +688,7 @@ export default function MobileApp({
           summaries={summaries} summarizing={summarizing}
           expandedId={expandedId} likedIds={likedIds} dislikedIds={dislikedIds}
           onToggle={id => setExpandedId(expandedId === id ? null : id)}
-          onSummarize={onSummarize} onDismiss={onDismiss}
+          onSummarize={onSummarize} onDismiss={onDismiss} onBlock={onBlock}
           onLike={onLike} onDislike={onDislike}
           onUnlike={onUnlike} onUndislike={onUndislike}
           onRegenerate={onRunDigest}

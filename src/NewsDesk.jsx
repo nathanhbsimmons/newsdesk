@@ -1,5 +1,5 @@
 import { useState, useEffect } from "react";
-import { strip, ago } from "./utils.js";
+import { strip, ago, isEnglish } from "./utils.js";
 import MobileApp from "./MobileNewsDesk.jsx";
 
 function useIsMobile() {
@@ -23,10 +23,18 @@ const DEFAULT_SOURCES = [
   { id: "devto",      name: "Dev.to",            url: "https://dev.to/feed",                                  color: "#42A5F5" },
 ];
 
-const K_DIS   = "nd-dismissed";
-const K_SRC   = "nd-sources";
-const K_ART   = "nd-articles";
-const K_PREFS = "nd-prefs";
+const K_DIS     = "nd-dismissed";
+const K_SRC     = "nd-sources";
+const K_ART     = "nd-articles";
+const K_PREFS   = "nd-prefs";
+const K_BLOCKED = "nd-blocked";
+
+const PAYWALL_DOMAINS = ["bloomberg.com"];
+const isPaywalled = (a) => PAYWALL_DOMAINS.some(d => (a.link || "").includes(d));
+
+const getDomain = (url) => {
+  try { return new URL(url).hostname.replace(/^www\./, ""); } catch { return null; }
+};
 
 const C = {
   bg:      "#0b0d12",
@@ -43,6 +51,7 @@ export default function NewsDesk() {
   const [sources, setSources]         = useState(DEFAULT_SOURCES);
   const [articles, setArticles]       = useState([]);
   const [dismissed, setDismissed]     = useState(new Set());
+  const [blocked, setBlocked]         = useState(new Set());
   const [srcStatus, setSrcStatus]     = useState({});
   const [fetching, setFetching]       = useState(true);
   const [storageOk, setStorageOk]     = useState(false);
@@ -84,6 +93,10 @@ export default function NewsDesk() {
     try {
       const d = localStorage.getItem(K_DIS);
       if (d) setDismissed(new Set(JSON.parse(d)));
+    } catch {}
+    try {
+      const b = localStorage.getItem(K_BLOCKED);
+      if (b) setBlocked(new Set(JSON.parse(b)));
     } catch {}
     try {
       const s = localStorage.getItem(K_SRC);
@@ -157,6 +170,14 @@ export default function NewsDesk() {
     const next = new Set([...dismissed]); next.delete(id);
     setDismissed(next);
     try { localStorage.setItem(K_DIS, JSON.stringify([...next])); } catch {}
+  };
+
+  const blockDomain = (link) => {
+    const domain = getDomain(link);
+    if (!domain) return;
+    const next = new Set([...blocked, domain]);
+    setBlocked(next);
+    try { localStorage.setItem(K_BLOCKED, JSON.stringify([...next])); } catch {}
   };
 
   const savePrefs = (next) => {
@@ -269,7 +290,14 @@ export default function NewsDesk() {
     if (activeSrc === id) setActiveSrc(null);
   };
 
-  const countFor = (id) => articles.filter(a => (!id || a.sourceId === id) && !dismissed.has(a.id)).length;
+  const countFor = (id) => articles.filter(a => {
+    if (dismissed.has(a.id)) return false;
+    if (blocked.has(getDomain(a.link))) return false;
+    if (isPaywalled(a)) return false;
+    if (!isEnglish(a.title + " " + (a.excerpt || ""))) return false;
+    if (id && a.sourceId !== id) return false;
+    return true;
+  }).length;
 
   const isMobile = useIsMobile();
   if (isMobile) {
@@ -278,6 +306,7 @@ export default function NewsDesk() {
         sources={sources}
         articles={articles}
         dismissed={dismissed}
+        blocked={blocked}
         srcStatus={srcStatus}
         fetching={fetching}
         activeSrc={activeSrc}
@@ -302,6 +331,7 @@ export default function NewsDesk() {
         onRefresh={() => setTick(t => t + 1)}
         onDismiss={dismiss}
         onUndismiss={undismiss}
+        onBlock={blockDomain}
         onLike={likeArticle}
         onDislike={dislikeArticle}
         onUnlike={unlikeArticle}
@@ -316,6 +346,9 @@ export default function NewsDesk() {
   const visible = articles.filter(a => {
     if (showDismissed) return dismissed.has(a.id);
     if (dismissed.has(a.id)) return false;
+    if (blocked.has(getDomain(a.link))) return false;
+    if (isPaywalled(a)) return false;
+    if (!isEnglish(a.title + " " + (a.excerpt || ""))) return false;
     if (activeSrc && a.sourceId !== activeSrc) return false;
     return true;
   });
@@ -424,6 +457,7 @@ export default function NewsDesk() {
               onToggle={id => setExpandedId(expandedId === id ? null : id)}
               onSummarize={summarize}
               onDismiss={dismiss}
+              onBlock={blockDomain}
               onLike={likeArticle}
               onDislike={dislikeArticle}
               onUnlike={unlikeArticle}
@@ -452,6 +486,7 @@ export default function NewsDesk() {
               onSummarize={() => summarize(article)}
               onDismiss={() => dismiss(article.id)}
               onUndismiss={() => undismiss(article.id)}
+              onBlock={() => blockDomain(article.link)}
               onLike={() => likeArticle(article)}
               onDislike={() => dislikeArticle(article)}
               onUnlike={() => unlikeArticle(article.id)}
@@ -464,7 +499,7 @@ export default function NewsDesk() {
   );
 }
 
-function DigestPanel({ digest, loading, dismissed, summaries, summarizing, expandedId, likedIds, dislikedIds, onToggle, onSummarize, onDismiss, onLike, onDislike, onUnlike, onUndislike }) {
+function DigestPanel({ digest, loading, dismissed, summaries, summarizing, expandedId, likedIds, dislikedIds, onToggle, onSummarize, onDismiss, onBlock, onLike, onDislike, onUnlike, onUndislike }) {
   if (loading) {
     return (
       <div style={{ display:"flex", flexDirection:"column", alignItems:"center", justifyContent:"center", height:220, gap:12 }}>
@@ -500,6 +535,7 @@ function DigestPanel({ digest, loading, dismissed, summaries, summarizing, expan
           onToggle={() => onToggle(pick.article.id)}
           onSummarize={() => onSummarize(pick.article)}
           onDismiss={() => onDismiss(pick.article.id)}
+          onBlock={() => onBlock(pick.article.link)}
           onLike={() => onLike(pick.article)}
           onDislike={() => onDislike(pick.article)}
           onUnlike={() => onUnlike(pick.article.id)}
@@ -510,7 +546,7 @@ function DigestPanel({ digest, loading, dismissed, summaries, summarizing, expan
   );
 }
 
-function DigestCard({ rank, pick, isExpanded, summary, isSummarizing, isLiked, isDisliked, onToggle, onSummarize, onDismiss, onLike, onDislike, onUnlike, onUndislike }) {
+function DigestCard({ rank, pick, isExpanded, summary, isSummarizing, isLiked, isDisliked, onToggle, onSummarize, onDismiss, onBlock, onLike, onDislike, onUnlike, onUndislike }) {
   const { article, reason } = pick;
   const [hov, setHov] = useState(false);
   const [btnHov, setBtnHov] = useState(null);
@@ -571,13 +607,32 @@ function DigestCard({ rank, pick, isExpanded, summary, isSummarizing, isLiked, i
           onLike={onLike} onDislike={onDislike}
           onUnlike={onUnlike} onUndislike={onUndislike}
         />
+        <button onClick={onBlock}
+          onMouseEnter={() => setBtnHov("blk")} onMouseLeave={() => setBtnHov(null)}
+          style={{ ...actionBtn, marginLeft:"auto", display:"flex", alignItems:"center", gap:4,
+            color: btnHov === "blk" ? C.red : "rgba(224,82,82,0.45)",
+            borderColor: btnHov === "blk" ? C.red : "transparent" }}>
+          <BlockIcon color={btnHov === "blk" ? C.red : "rgba(224,82,82,0.45)"} />
+          {btnHov === "blk" && <span>Block</span>}
+        </button>
         <button onClick={onDismiss}
           onMouseEnter={() => setBtnHov("dis")} onMouseLeave={() => setBtnHov(null)}
-          style={{ ...actionBtn, marginLeft:"auto", color: btnHov === "dis" ? C.red : C.muted, borderColor: btnHov === "dis" ? C.red : "transparent" }}>
+          style={{ ...actionBtn, color: btnHov === "dis" ? C.red : C.muted, borderColor: btnHov === "dis" ? C.red : "transparent" }}>
           ✕ Dismiss
         </button>
       </div>
     </div>
+  );
+}
+
+function BlockIcon({ size = 12, color }) {
+  return (
+    <svg width={size} height={size} viewBox="0 0 14 14" fill="none"
+         stroke={color} strokeWidth="1.6" strokeLinecap="round"
+         style={{ display:"block", flexShrink:0 }}>
+      <circle cx="7" cy="7" r="5.8" />
+      <line x1="2.9" y1="2.9" x2="11.1" y2="11.1" />
+    </svg>
   );
 }
 
@@ -683,7 +738,7 @@ function NavItem({ active, onClick, color, label, count, isAll, isSpecial, error
   );
 }
 
-function ArticleCard({ article, isDismissed, isExpanded, summary, isSummarizing, isLiked, isDisliked, onToggle, onSummarize, onDismiss, onUndismiss, onLike, onDislike, onUnlike, onUndislike }) {
+function ArticleCard({ article, isDismissed, isExpanded, summary, isSummarizing, isLiked, isDisliked, onToggle, onSummarize, onDismiss, onUndismiss, onBlock, onLike, onDislike, onUnlike, onUndislike }) {
   const [hov, setHov] = useState(false);
   const [btnHov, setBtnHov] = useState(null);
 
@@ -762,11 +817,21 @@ function ArticleCard({ article, isDismissed, isExpanded, summary, isSummarizing,
             ↩ Restore
           </button>
         ) : (
-          <button onClick={onDismiss}
-            onMouseEnter={() => setBtnHov("dis")} onMouseLeave={() => setBtnHov(null)}
-            style={{ ...actionBtn, marginLeft:"auto", color: btnHov === "dis" ? "#e05252" : "#4a5268", borderColor: btnHov === "dis" ? "#e05252" : "transparent" }}>
-            ✕ Dismiss
-          </button>
+          <>
+            <button onClick={onBlock}
+              onMouseEnter={() => setBtnHov("blk")} onMouseLeave={() => setBtnHov(null)}
+              style={{ ...actionBtn, marginLeft:"auto", display:"flex", alignItems:"center", gap:4,
+                color: btnHov === "blk" ? C.red : "rgba(224,82,82,0.45)",
+                borderColor: btnHov === "blk" ? C.red : "transparent" }}>
+              <BlockIcon color={btnHov === "blk" ? C.red : "rgba(224,82,82,0.45)"} />
+              {btnHov === "blk" && <span>Block</span>}
+            </button>
+            <button onClick={onDismiss}
+              onMouseEnter={() => setBtnHov("dis")} onMouseLeave={() => setBtnHov(null)}
+              style={{ ...actionBtn, color: btnHov === "dis" ? C.red : C.muted, borderColor: btnHov === "dis" ? C.red : "transparent" }}>
+              ✕ Dismiss
+            </button>
+          </>
         )}
       </div>
     </div>
