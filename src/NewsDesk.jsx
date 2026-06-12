@@ -150,9 +150,17 @@ export default function NewsDesk() {
       setArticles(prev => {
         const map = new Map(prev.map(a => [a.id, a]));
         allFresh.forEach(a => map.set(a.id, a));
-        const merged = [...map.values()]
-          .sort((a, b) => new Date(b.pubDate) - new Date(a.pubDate))
-          .slice(0, 350);
+        const bySource = new Map();
+        for (const a of map.values()) {
+          if (!bySource.has(a.sourceId)) bySource.set(a.sourceId, []);
+          bySource.get(a.sourceId).push(a);
+        }
+        const merged = [];
+        for (const bucket of bySource.values()) {
+          bucket.sort((a, b) => new Date(b.pubDate) - new Date(a.pubDate));
+          merged.push(...bucket.slice(0, 25));
+        }
+        merged.sort((a, b) => new Date(b.pubDate) - new Date(a.pubDate));
         try { localStorage.setItem(K_ART, JSON.stringify(merged)); } catch {}
         return merged;
       });
