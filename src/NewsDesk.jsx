@@ -69,6 +69,8 @@ export default function NewsDesk() {
   const [digest, setDigest]           = useState(null);
   const [digestLoading, setDigestLoading] = useState(false);
   const [prefs, setPrefs]             = useState({ liked: [], disliked: [] });
+  const [dragSrcId, setDragSrcId]     = useState(null);
+  const [dragOverId, setDragOverId]   = useState(null);
 
   useEffect(() => {
     const link = document.createElement("link");
@@ -113,6 +115,26 @@ export default function NewsDesk() {
     } catch {}
     setStorageOk(true);
   }, []);
+
+  // Sync source order from server on load (cross-device persistence)
+  useEffect(() => {
+    if (!storageOk) return;
+    fetch("/api/prefs")
+      .then(r => r.json())
+      .then(d => {
+        if (!d.data?.sourceOrder) return;
+        const order = d.data.sourceOrder;
+        setSources(prev => {
+          const map = new Map(prev.map(s => [s.id, s]));
+          const ordered = order.filter(id => map.has(id)).map(id => map.get(id));
+          const rest = prev.filter(s => !order.includes(s.id));
+          const next = [...ordered, ...rest];
+          try { localStorage.setItem(K_SRC, JSON.stringify(next)); } catch {}
+          return next;
+        });
+      })
+      .catch(() => {});
+  }, [storageOk]);
 
   useEffect(() => {
     if (!storageOk) return;
@@ -312,6 +334,24 @@ export default function NewsDesk() {
     if (activeSrc === id) setActiveSrc(null);
   };
 
+  const reorderSources = (fromId, toId) => {
+    if (!fromId || fromId === toId) return;
+    setSources(prev => {
+      const next = [...prev];
+      const fi = next.findIndex(s => s.id === fromId);
+      const ti = next.findIndex(s => s.id === toId);
+      if (fi < 0 || ti < 0) return prev;
+      next.splice(ti, 0, next.splice(fi, 1)[0]);
+      try { localStorage.setItem(K_SRC, JSON.stringify(next)); } catch {}
+      fetch("/api/prefs", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ sourceOrder: next.map(s => s.id) }),
+      }).catch(() => {});
+      return next;
+    });
+  };
+
   const countFor = (id) => articles.filter(a => {
     if (dismissed.has(a.id)) return false;
     if (blocked.has(getDomain(a.link))) return false;
@@ -350,6 +390,7 @@ export default function NewsDesk() {
         prefs={prefs}
         onAddSource={addSource}
         onRemoveSource={removeSource}
+        onReorderSource={reorderSources}
         onRefresh={() => setTick(t => t + 1)}
         onDismiss={dismiss}
         onUndismiss={undismiss}
@@ -408,14 +449,27 @@ export default function NewsDesk() {
           />
           <div style={{ height:1, background:C.border, margin:"6px 8px" }} />
           {sources.map(src => (
-            <NavItem
+            <div
               key={src.id}
-              active={activeSrc === src.id}
-              onClick={() => { setActiveSrc(src.id); setShowDismissed(false); setShowDigest(false); setShowBlocked(false); }}
-              color={src.color} label={src.name} count={countFor(src.id)}
-              error={srcStatus[src.id] === "error"}
-              onRemove={() => removeSource(src.id)}
-            />
+              onDragOver={e => { e.preventDefault(); setDragOverId(src.id); }}
+              onDrop={e => { e.preventDefault(); reorderSources(dragSrcId, src.id); setDragSrcId(null); setDragOverId(null); }}
+              onDragEnd={() => { setDragSrcId(null); setDragOverId(null); }}
+              style={{
+                opacity: dragSrcId === src.id ? 0.35 : 1,
+                transition: "opacity 0.1s",
+                borderTop: dragOverId === src.id && dragSrcId !== src.id
+                  ? `2px solid ${C.accent}` : "2px solid transparent",
+              }}
+            >
+              <NavItem
+                active={activeSrc === src.id}
+                onClick={() => { setActiveSrc(src.id); setShowDismissed(false); setShowDigest(false); setShowBlocked(false); }}
+                color={src.color} label={src.name} count={countFor(src.id)}
+                error={srcStatus[src.id] === "error"}
+                onRemove={() => removeSource(src.id)}
+                onDragStart={e => { setDragSrcId(src.id); e.dataTransfer.effectAllowed = "move"; e.dataTransfer.setData("text/plain", src.id); }}
+              />
+            </div>
           ))}
           <div style={{ height:1, background:C.border, margin:"6px 8px" }} />
           <NavItem
@@ -738,7 +792,17 @@ function LikeDislikeButtons({ isLiked, isDisliked, onLike, onDislike, onUnlike, 
   );
 }
 
-function NavItem({ active, onClick, color, label, count, isAll, isSpecial, error, onRemove }) {
+function GripIcon() {
+  return (
+    <svg width="9" height="13" viewBox="0 0 9 13" fill="currentColor" style={{ display:"block" }}>
+      <circle cx="2.5" cy="2"   r="1.2"/><circle cx="6.5" cy="2"   r="1.2"/>
+      <circle cx="2.5" cy="6.5" r="1.2"/><circle cx="6.5" cy="6.5" r="1.2"/>
+      <circle cx="2.5" cy="11"  r="1.2"/><circle cx="6.5" cy="11"  r="1.2"/>
+    </svg>
+  );
+}
+
+function NavItem({ active, onClick, color, label, count, isAll, isSpecial, error, onRemove, onDragStart }) {
   const [hov, setHov] = useState(false);
   return (
     <div
@@ -754,6 +818,25 @@ function NavItem({ active, onClick, color, label, count, isAll, isSpecial, error
         transition:"background 0.15s",
       }}
     >
+      {onDragStart && (
+        <span
+          draggable
+          onDragStart={onDragStart}
+          onClick={e => e.stopPropagation()}
+          title="Drag to reorder"
+          style={{
+            color: hov ? "#4a5268" : "transparent",
+            transition: "color 0.15s",
+            cursor: "grab",
+            flexShrink: 0,
+            display: "flex",
+            alignItems: "center",
+            marginLeft: -2,
+          }}
+        >
+          <GripIcon />
+        </span>
+      )}
       <span style={{ width:7, height:7, borderRadius:"50%", background:color, flexShrink:0 }} />
       <span style={{ fontSize:12, color: active ? (isSpecial ? "#a78bfa" : "#e8874b") : "#c8cdd8", flex:1, overflow:"hidden", textOverflow:"ellipsis", whiteSpace:"nowrap" }}>
         {label}

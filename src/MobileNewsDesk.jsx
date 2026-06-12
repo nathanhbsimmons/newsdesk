@@ -472,24 +472,36 @@ function MobileDigestView({ digest, loading, dismissed, summaries, summarizing, 
 }
 
 // ── Sources management tab ───────────────────────────────────────────────────
-function MobileSourcesView({ sources, srcStatus, onRemove, blocked, onUnblock,
+function MobileSourcesView({ sources, srcStatus, onRemove, onReorder, blocked, onUnblock,
                              showAdd, setShowAdd, newName, setNewName,
                              newUrl, setNewUrl, onAdd, onRefresh }) {
   const blockedList = blocked ? [...blocked].sort() : [];
   return (
     <div style={{ flex: 1, overflowY: "auto", WebkitOverflowScrolling: "touch" }}>
       {/* Source list */}
-      {sources.map(src => (
+      {sources.map((src, idx) => (
         <div key={src.id} style={{ display: "flex", alignItems: "center", gap: 12, padding: "15px 16px", borderBottom: `1px solid ${MC.border}`, background: MC.surf }}>
           <span style={{ width: 8, height: 8, borderRadius: "50%", background: src.color, flexShrink: 0 }} />
           <span style={{ fontSize: 13, color: MC.text, flex: 1, fontFamily: "'Noto Sans Nabataean', sans-serif" }}>{src.name}</span>
           {srcStatus[src.id] === "error" && (
             <span style={{ fontSize: 10, color: MC.red, fontFamily: "'Noto Sans Nabataean', sans-serif" }}>err</span>
           )}
-          <button onClick={() => onRemove(src.id)}
-            style={{ ...iconBtn, width: 36, height: 36, color: MC.muted, fontSize: 18, fontFamily: "inherit" }}>
-            ×
-          </button>
+          <div style={{ display: "flex", gap: 2 }}>
+            <button
+              onClick={() => idx > 0 && onReorder(src.id, sources[idx - 1].id)}
+              disabled={idx === 0}
+              style={{ ...iconBtn, width: 30, height: 30, fontSize: 14, color: idx === 0 ? MC.border : MC.muted, opacity: idx === 0 ? 0.3 : 1 }}
+            >↑</button>
+            <button
+              onClick={() => idx < sources.length - 1 && onReorder(src.id, sources[idx + 1].id)}
+              disabled={idx === sources.length - 1}
+              style={{ ...iconBtn, width: 30, height: 30, fontSize: 14, color: idx === sources.length - 1 ? MC.border : MC.muted, opacity: idx === sources.length - 1 ? 0.3 : 1 }}
+            >↓</button>
+            <button onClick={() => onRemove(src.id)}
+              style={{ ...iconBtn, width: 36, height: 36, color: MC.muted, fontSize: 18, fontFamily: "inherit" }}>
+              ×
+            </button>
+          </div>
         </div>
       ))}
 
@@ -614,7 +626,7 @@ export default function MobileApp({
   summaries, summarizing, expandedId, setExpandedId,
   showAdd, setShowAdd, newName, setNewName, newUrl, setNewUrl,
   digest, digestLoading, prefs,
-  onAddSource, onRemoveSource, onRefresh,
+  onAddSource, onRemoveSource, onReorderSource, onRefresh,
   onDismiss, onUndismiss, onBlock, onUnblock, onClearDismissed,
   onLike, onDislike, onUnlike, onUndislike,
   onSummarize, onRunDigest, countFor,
@@ -725,7 +737,7 @@ export default function MobileApp({
       {/* ── Sources tab ── */}
       {tab === "sources" && (
         <MobileSourcesView
-          sources={sources} srcStatus={srcStatus} onRemove={onRemoveSource}
+          sources={sources} srcStatus={srcStatus} onRemove={onRemoveSource} onReorder={onReorderSource}
           blocked={blocked} onUnblock={onUnblock}
           showAdd={showAdd} setShowAdd={setShowAdd}
           newName={newName} setNewName={setNewName}
