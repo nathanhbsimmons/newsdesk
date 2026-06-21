@@ -12,7 +12,7 @@ export default async function handler(req, res) {
       const { blobs } = await list({ prefix: PREFS_PATH });
       const found = blobs.find(b => b.pathname === PREFS_PATH);
       if (!found) return res.json({ status: "ok", data: null });
-      const r = await fetch(found.downloadUrl);
+      const r = await fetch(found.downloadUrl, { cache: "no-store" });
       const data = await r.json();
       return res.json({ status: "ok", data });
     } catch {

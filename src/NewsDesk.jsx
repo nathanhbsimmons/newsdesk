@@ -122,7 +122,19 @@ export default function NewsDesk() {
     fetch("/api/prefs")
       .then(r => r.json())
       .then(d => {
-        if (!d.data) return;
+        if (!d.data) {
+          // Server has no data yet — seed it from whatever is currently loaded
+          // (handles sources that existed before sync was introduced)
+          setSources(prev => {
+            fetch("/api/prefs", {
+              method: "POST",
+              headers: { "Content-Type": "application/json" },
+              body: JSON.stringify({ sources: prev }),
+            }).catch(() => {});
+            return prev;
+          });
+          return;
+        }
         if (d.data.sources) {
           // Full source list from server wins — apply it directly
           const next = d.data.sources;
