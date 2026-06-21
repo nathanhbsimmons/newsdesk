@@ -116,25 +116,41 @@ export default function NewsDesk() {
     setStorageOk(true);
   }, []);
 
-  // Sync source order from server on load (cross-device persistence)
+  // Sync sources from server on load (cross-device persistence)
   useEffect(() => {
     if (!storageOk) return;
     fetch("/api/prefs")
       .then(r => r.json())
       .then(d => {
-        if (!d.data?.sourceOrder) return;
-        const order = d.data.sourceOrder;
-        setSources(prev => {
-          const map = new Map(prev.map(s => [s.id, s]));
-          const ordered = order.filter(id => map.has(id)).map(id => map.get(id));
-          const rest = prev.filter(s => !order.includes(s.id));
-          const next = [...ordered, ...rest];
+        if (!d.data) return;
+        if (d.data.sources) {
+          // Full source list from server wins — apply it directly
+          const next = d.data.sources;
+          setSources(next);
           try { localStorage.setItem(K_SRC, JSON.stringify(next)); } catch {}
-          return next;
-        });
+        } else if (d.data.sourceOrder) {
+          // Legacy: only order saved — reorder local sources to match
+          const order = d.data.sourceOrder;
+          setSources(prev => {
+            const map = new Map(prev.map(s => [s.id, s]));
+            const ordered = order.filter(id => map.has(id)).map(id => map.get(id));
+            const rest = prev.filter(s => !order.includes(s.id));
+            const next = [...ordered, ...rest];
+            try { localStorage.setItem(K_SRC, JSON.stringify(next)); } catch {}
+            return next;
+          });
+        }
       })
       .catch(() => {});
   }, [storageOk]);
+
+  const syncSourcesRemote = (next) => {
+    fetch("/api/prefs", {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ sources: next }),
+    }).catch(() => {});
+  };
 
   useEffect(() => {
     if (!storageOk) return;
@@ -324,6 +340,7 @@ export default function NewsDesk() {
     const next = [...sources, src];
     setSources(next);
     try { localStorage.setItem(K_SRC, JSON.stringify(next)); } catch {}
+    syncSourcesRemote(next);
     setNewName(""); setNewUrl(""); setShowAdd(false); setTick(t => t + 1);
   };
 
@@ -331,6 +348,7 @@ export default function NewsDesk() {
     const next = sources.filter(s => s.id !== id);
     setSources(next);
     try { localStorage.setItem(K_SRC, JSON.stringify(next)); } catch {}
+    syncSourcesRemote(next);
     if (activeSrc === id) setActiveSrc(null);
   };
 
@@ -343,11 +361,7 @@ export default function NewsDesk() {
       if (fi < 0 || ti < 0) return prev;
       next.splice(ti, 0, next.splice(fi, 1)[0]);
       try { localStorage.setItem(K_SRC, JSON.stringify(next)); } catch {}
-      fetch("/api/prefs", {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ sourceOrder: next.map(s => s.id) }),
-      }).catch(() => {});
+      syncSourcesRemote(next);
       return next;
     });
   };
