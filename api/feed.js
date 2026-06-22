@@ -44,7 +44,7 @@ export function parseItems(parsed) {
         text(entry.link);
       return {
         title:       text(entry.title),
-        link:        href ?? "",
+        link:        href,
         guid:        text(entry.id) || href || "",
         description: text(entry.content) || text(entry.summary),
         pubDate:     text(entry.published) || text(entry.updated),

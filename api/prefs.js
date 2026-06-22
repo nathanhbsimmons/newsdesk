@@ -1,4 +1,4 @@
-import { put, list } from "@vercel/blob";
+import { put, get } from "@vercel/blob";
 
 const PREFS_PATH = "newsdesk-prefs.json";
 
@@ -9,11 +9,9 @@ export default async function handler(req, res) {
 
   if (req.method === "GET") {
     try {
-      const { blobs } = await list({ prefix: PREFS_PATH });
-      const found = blobs.find(b => b.pathname === PREFS_PATH);
-      if (!found) return res.json({ status: "ok", data: null });
-      const r = await fetch(found.downloadUrl, { cache: "no-store" });
-      const data = await r.json();
+      const result = await get(PREFS_PATH, { access: "private" });
+      if (!result) return res.json({ status: "ok", data: null });
+      const data = await new Response(result.stream).json();
       return res.json({ status: "ok", data });
     } catch {
       return res.json({ status: "ok", data: null });
@@ -24,7 +22,7 @@ export default async function handler(req, res) {
     try {
       const body = typeof req.body === "string" ? req.body : JSON.stringify(req.body);
       await put(PREFS_PATH, body, {
-        access: "public",
+        access: "private",
         contentType: "application/json",
         addRandomSuffix: false,
         allowOverwrite: true,

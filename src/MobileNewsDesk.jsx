@@ -431,7 +431,7 @@ function MobileDigestView({ digest, loading, dismissed, summaries, summarizing, 
       </div>
     );
   }
-  const visible = dismissed ? digest.filter(p => !dismissed.has(p.article.id)) : digest;
+  const visible = digest.filter(p => !dismissed.has(p.article.id));
   return (
     <div style={{ flex: 1, overflowY: "auto", WebkitOverflowScrolling: "touch" }}>
       {/* Header banner */}
@@ -475,7 +475,7 @@ function MobileDigestView({ digest, loading, dismissed, summaries, summarizing, 
 function MobileSourcesView({ sources, srcStatus, onRemove, onReorder, blocked, onUnblock,
                              showAdd, setShowAdd, newName, setNewName,
                              newUrl, setNewUrl, onAdd, onRefresh }) {
-  const blockedList = blocked ? [...blocked].sort() : [];
+  const blockedList = [...blocked].sort();
   return (
     <div style={{ flex: 1, overflowY: "auto", WebkitOverflowScrolling: "touch" }}>
       {/* Source list */}

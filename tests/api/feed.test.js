@@ -310,4 +310,134 @@ describe("parseItems()", () => {
     };
     expect(parseItems(parsed)[0].pubDate).toBe("2024-06-01T00:00:00Z");
   });
+
+  it("returns empty string for an object field with no #text or __cdata key", () => {
+    const parsed = {
+      rss: {
+        channel: {
+          item: {
+            title: { "@_type": "html" },
+            link: "https://example.com/1",
+            guid: "g-1",
+            description: "desc",
+            pubDate: "2024-01-01",
+          },
+        },
+      },
+    };
+    const items = parseItems(parsed);
+    expect(items[0].title).toBe("");
+  });
+
+  it("converts a numeric field value to string (text() number branch)", () => {
+    const parsed = {
+      rss: {
+        channel: {
+          item: {
+            title: "Numeric Date",
+            link: "https://example.com/n",
+            guid: "g-n",
+            description: "content",
+            pubDate: 20240101,
+          },
+        },
+      },
+    };
+    expect(parseItems(parsed)[0].pubDate).toBe("20240101");
+  });
+
+  it("falls back link to guid text when link is empty", () => {
+    const parsed = {
+      rss: {
+        channel: {
+          item: {
+            title: "No Link",
+            link: "",
+            guid: "https://example.com/via-guid",
+            description: "",
+            pubDate: "",
+          },
+        },
+      },
+    };
+    expect(parseItems(parsed)[0].link).toBe("https://example.com/via-guid");
+  });
+
+  it("handles Atom entry with no link property (entry.link ?? [] branch)", () => {
+    const parsed = {
+      feed: {
+        entry: {
+          title: "No Link Atom",
+          id: "urn:no-link",
+          content: "some content",
+          published: "2024-01-01T00:00:00Z",
+        },
+      },
+    };
+    const items = parseItems(parsed);
+    expect(items[0].title).toBe("No Link Atom");
+    expect(items[0].link).toBe("");
+  });
+
+  it("uses text(entry.link) as third fallback when no @_href exists on link objects", () => {
+    const parsed = {
+      feed: {
+        entry: {
+          title: "Plain Link",
+          id: "urn:plain",
+          link: "https://example.com/plain",
+          content: "content",
+          published: "2024-01-01T00:00:00Z",
+        },
+      },
+    };
+    expect(parseItems(parsed)[0].link).toBe("https://example.com/plain");
+  });
+
+  it("falls back guid to href when entry has no id", () => {
+    const parsed = {
+      feed: {
+        entry: {
+          title: "No ID",
+          link: { "@_rel": "alternate", "@_href": "https://example.com/no-id" },
+          content: "content",
+          published: "2024-01-01T00:00:00Z",
+        },
+      },
+    };
+    const items = parseItems(parsed);
+    expect(items[0].guid).toBe("https://example.com/no-id");
+  });
+
+  it("falls back guid to empty string when entry has no id and no link", () => {
+    const parsed = {
+      feed: {
+        entry: {
+          title: "No ID No Link",
+          content: "content",
+          published: "2024-01-01T00:00:00Z",
+        },
+      },
+    };
+    const items = parseItems(parsed);
+    expect(items[0].guid).toBe("");
+  });
+});
+
+describe("GET /api/feed — edge cases", () => {
+  beforeEach(() => { vi.stubGlobal("fetch", vi.fn()); });
+  afterEach(() => { vi.unstubAllGlobals(); });
+
+  it("returns 400 when req.query is undefined (req.query ?? {} branch)", async () => {
+    const res = makeRes();
+    await handler({ method: "GET" }, res);
+    expect(res.status).toHaveBeenCalledWith(400);
+  });
+
+  it("uses 'Unknown error' when thrown error has no message property", async () => {
+    fetch.mockRejectedValueOnce({ code: "ECONNRESET" });
+    const res = makeRes();
+    await handler(makeReq({ url: "https://example.com/rss" }), res);
+    expect(res.json.mock.calls[0][0]).toMatchObject({ status: "error", message: "Unknown error" });
+  });
 });

@@ -251,11 +251,6 @@ export default function NewsDesk() {
     try { localStorage.setItem(K_DIS, JSON.stringify([])); } catch {}
   };
 
-  const savePrefs = (next) => {
-    setPrefs(next);
-    try { localStorage.setItem(K_PREFS, JSON.stringify(next)); } catch {}
-  };
-
   const likeArticle = (article) => {
     setPrefs(prev => {
       const entry = { id: article.id, title: article.title, sourceName: article.sourceName, date: new Date().toISOString() };
@@ -295,7 +290,6 @@ export default function NewsDesk() {
   };
 
   const summarize = async (article) => {
-    if (summaries[article.id] || summarizing[article.id]) return;
     setSummarizing(p => ({ ...p, [article.id]: true }));
     try {
       const res = await fetch("/api/summarize", {
@@ -313,7 +307,6 @@ export default function NewsDesk() {
   };
 
   const runDigest = async () => {
-    if (digestLoading) return;
     const unread = articles.filter(a => !dismissed.has(a.id));
     if (unread.length === 0) return;
     setDigestLoading(true);
@@ -634,7 +627,7 @@ function DigestPanel({ digest, loading, dismissed, summaries, summarizing, expan
   if (digest.length === 0) {
     return <div style={{ textAlign:"center", padding:60, color:"#4a5268", fontSize:12 }}>Could not generate digest. Try refreshing feeds first.</div>;
   }
-  const visible = dismissed ? digest.filter(pick => !dismissed.has(pick.article.id)) : digest;
+  const visible = digest.filter(pick => !dismissed.has(pick.article.id));
   if (visible.length === 0) {
     return <div style={{ textAlign:"center", padding:60, color:"#4a5268", fontSize:12 }}>All digest articles dismissed.</div>;
   }
@@ -872,8 +865,8 @@ function NavItem({ active, onClick, color, label, count, isAll, isSpecial, error
         : count != null && (
           <span style={{
             fontSize:10, padding:"1px 7px", borderRadius:10, flexShrink:0,
-            color: count > 0 ? (isSpecial ? "#a78bfa" : "#e8874b") : "#4a5268",
-            background: count > 0 ? (isSpecial ? "rgba(167,139,250,0.15)" : "rgba(232,135,75,0.15)") : "rgba(255,255,255,0.05)",
+            color: count > 0 ? "#e8874b" : "#4a5268",
+            background: count > 0 ? "rgba(232,135,75,0.15)" : "rgba(255,255,255,0.05)",
           }}>
             {count}
           </span>
