@@ -131,12 +131,55 @@ describe("MobileApp — feed tab (default)", () => {
     expect(screen.getByText("An insightful summary.")).toBeInTheDocument();
   });
 
-  it("calls onDismiss when dismiss button is clicked", () => {
+  it("collapses and re-expands the AI summary when its header is clicked", () => {
+    const summaries = { "tldr::a1": "An insightful summary." };
+    render(<MobileApp {...makeProps({ summaries, expandedId: "tldr::a1" })} />);
+    const summaryText = screen.getByText("An insightful summary.");
+    expect(summaryText).toBeInTheDocument();
+    fireEvent.click(screen.getByText("Hide ▲"));
+    expect(screen.queryByText("An insightful summary.")).not.toBeInTheDocument();
+    fireEvent.click(screen.getByText("Show ▼"));
+    expect(screen.getByText("An insightful summary.")).toBeInTheDocument();
+  });
+
+  it("toggles expand/collapse when the excerpt is clicked, not just the title", () => {
+    const setExpandedId = vi.fn();
+    render(<MobileApp {...makeProps({ setExpandedId })} />);
+    fireEvent.click(screen.getByText("Excerpt one"));
+    expect(setExpandedId).toHaveBeenCalledWith("tldr::a1");
+  });
+
+  it("calls onDismiss when a card is swiped right past the threshold", () => {
     const onDismiss = vi.fn();
     render(<MobileApp {...makeProps({ onDismiss })} />);
-    const dismissBtns = screen.getAllByText("✕");
-    fireEvent.click(dismissBtns[0]);
-    expect(onDismiss).toHaveBeenCalled();
+    const title = screen.getByText("Mobile Article One");
+    // The swipe handlers live on the wrapper div directly inside the SwipeableCard root
+    const swipeTarget = title.closest("[style*='position: relative']");
+    fireEvent.touchStart(swipeTarget, { touches: [{ clientX: 0, clientY: 0 }] });
+    fireEvent.touchMove(swipeTarget, { touches: [{ clientX: 150, clientY: 0 }] });
+    fireEvent.touchEnd(swipeTarget);
+    expect(onDismiss).toHaveBeenCalledWith("tldr::a1");
+  });
+
+  it("does not call onDismiss when a card is swiped right below the threshold", () => {
+    const onDismiss = vi.fn();
+    render(<MobileApp {...makeProps({ onDismiss })} />);
+    const title = screen.getByText("Mobile Article One");
+    const swipeTarget = title.closest("[style*='position: relative']");
+    fireEvent.touchStart(swipeTarget, { touches: [{ clientX: 0, clientY: 0 }] });
+    fireEvent.touchMove(swipeTarget, { touches: [{ clientX: 20, clientY: 0 }] });
+    fireEvent.touchEnd(swipeTarget);
+    expect(onDismiss).not.toHaveBeenCalled();
+  });
+
+  it("does not render an X dismiss button or a block button on cards", () => {
+    render(<MobileApp {...makeProps()} />);
+    expect(screen.queryByText("✕")).not.toBeInTheDocument();
+    // The bottom nav's Sources icon legitimately uses <circle> elements —
+    // scope the check to the feed list so it only inspects card buttons.
+    const title = screen.getByText("Mobile Article One");
+    const card = title.closest("[style*='position: relative']").parentElement;
+    expect(card.querySelectorAll("button svg circle").length).toBe(0);
   });
 
   it("calls onSummarize when summary button is clicked", () => {
@@ -411,14 +454,16 @@ describe("MobileApp — digest tab", () => {
     expect(setExpandedId).toHaveBeenCalled();
   });
 
-  it("clicking dismiss in digest card calls onDismiss", () => {
+  it("swiping right on a digest card calls onDismiss", () => {
     const onDismiss = vi.fn();
     const digest = [{ index: 1, reason: "Good article", article: ARTICLES[0] }];
     render(<MobileApp {...makeProps({ digest, digestLoading: false, onDismiss })} />);
     fireEvent.click(screen.getByText("Digest"));
-    screen.getByText("Good article");
-    const dismissBtns = screen.getAllByText("✕");
-    fireEvent.click(dismissBtns[0]);
+    const reasonEl = screen.getByText("Good article");
+    const swipeTarget = reasonEl.closest("[style*='position: relative']");
+    fireEvent.touchStart(swipeTarget, { touches: [{ clientX: 0, clientY: 0 }] });
+    fireEvent.touchMove(swipeTarget, { touches: [{ clientX: 150, clientY: 0 }] });
+    fireEvent.touchEnd(swipeTarget);
     expect(onDismiss).toHaveBeenCalled();
   });
 
@@ -473,16 +518,6 @@ describe("MobileApp — dismissed article callbacks", () => {
     expect(screen.getByText("Mobile Article One")).toBeInTheDocument();
   });
 
-  it("calls onBlock when block button is clicked on a non-dismissed article", () => {
-    const onBlock = vi.fn();
-    render(<MobileApp {...makeProps({ onBlock })} />);
-    // Block button has a BlockIcon (SVG circle)
-    const blockBtns = document.querySelectorAll("button svg circle");
-    if (blockBtns.length > 0) {
-      fireEvent.click(blockBtns[0].closest("button"));
-      expect(onBlock).toHaveBeenCalled();
-    }
-  });
 });
 
 // ── Source pill / header ──────────────────────────────────────────────────────
@@ -529,7 +564,7 @@ describe("MobileApp — unlike and undislike in feed", () => {
     render(<MobileApp {...makeProps({ prefs, onUnlike })} />);
     // The AI summarize button is before the MobileSignal div in CardActions
     const aiBtn = screen.getAllByText("✦ AI")[0];
-    const signalDiv = aiBtn.nextElementSibling;
+    const signalDiv = aiBtn.parentElement.lastElementChild;
     const likeBtn = signalDiv?.querySelector("button");
     if (likeBtn) {
       fireEvent.click(likeBtn);
@@ -545,7 +580,7 @@ describe("MobileApp — unlike and undislike in feed", () => {
     render(<MobileApp {...makeProps({ prefs, onUndislike })} />);
     // The second button inside the MobileSignal div is the SignalLow (dislike/undislike) button
     const aiBtn = screen.getAllByText("✦ AI")[0];
-    const signalDiv = aiBtn.nextElementSibling;
+    const signalDiv = aiBtn.parentElement.lastElementChild;
     const buttons = signalDiv?.querySelectorAll("button");
     if (buttons?.length >= 2) {
       fireEvent.click(buttons[1]);
@@ -665,16 +700,15 @@ describe("MobileApp — digest card arrow function callbacks", () => {
     }
   });
 
-  it("calls onBlock via arrow function in digest card", () => {
-    const onBlock = vi.fn();
-    renderDigest({ onBlock });
-    const blockBtns = document.querySelectorAll("button svg circle");
-    if (blockBtns.length > 0) {
-      fireEvent.click(blockBtns[0].closest("button"));
-      expect(onBlock).toHaveBeenCalled();
-    } else {
-      expect(true).toBe(true);
-    }
+  it("calls onDismiss via arrow function when a digest card is swiped right", () => {
+    const onDismiss = vi.fn();
+    renderDigest({ onDismiss });
+    const reasonEl = screen.getByText("Callback test");
+    const swipeTarget = reasonEl.closest("[style*='position: relative']");
+    fireEvent.touchStart(swipeTarget, { touches: [{ clientX: 0, clientY: 0 }] });
+    fireEvent.touchMove(swipeTarget, { touches: [{ clientX: 150, clientY: 0 }] });
+    fireEvent.touchEnd(swipeTarget);
+    expect(onDismiss).toHaveBeenCalledWith(ARTICLES[0].id);
   });
 
   it("calls onDislike via arrow function in digest card", () => {
@@ -693,7 +727,7 @@ describe("MobileApp — digest card arrow function callbacks", () => {
     renderDigest({ onUnlike, prefs });
     // Navigate from the AI button to the MobileSignal div, then get the first (like) button
     const aiBtn = screen.getAllByText("✦ AI")[0];
-    const signalDiv = aiBtn.nextElementSibling;
+    const signalDiv = aiBtn.parentElement.lastElementChild;
     const likeBtn = signalDiv?.querySelector("button");
     if (likeBtn) {
       fireEvent.click(likeBtn);
@@ -709,7 +743,7 @@ describe("MobileApp — digest card arrow function callbacks", () => {
     renderDigest({ onUndislike, prefs });
     // Second button inside MobileSignal div is the SignalLow (dislike/undislike) button
     const aiBtn = screen.getAllByText("✦ AI")[0];
-    const signalDiv = aiBtn.nextElementSibling;
+    const signalDiv = aiBtn.parentElement.lastElementChild;
     const buttons = signalDiv?.querySelectorAll("button");
     if (buttons?.length >= 2) {
       fireEvent.click(buttons[1]);
