@@ -2,7 +2,7 @@
 // Mobile layout for NewsDesk — renders at ≤ 768 px viewport width.
 // All state + handlers are passed in as props from the parent NewsDesk component.
 
-import { useState, useEffect } from "react";
+import { useState, useEffect, useRef } from "react";
 
 function LoadingDots() {
   const [step, setStep] = useState(0);
@@ -63,18 +63,6 @@ const rowBtn = {
   fontFamily: "'Noto Sans Nabataean', sans-serif", fontSize: 12,
   gap: 4, whiteSpace: "nowrap", flexShrink: 0,
 };
-
-// ── Block icon ───────────────────────────────────────────────────────────────
-function BlockIcon({ size = 14, color }) {
-  return (
-    <svg width={size} height={size} viewBox="0 0 14 14" fill="none"
-         stroke={color} strokeWidth="1.6" strokeLinecap="round"
-         style={{ display: "block", flexShrink: 0 }}>
-      <circle cx="7" cy="7" r="5.8" />
-      <line x1="2.9" y1="2.9" x2="11.1" y2="11.1" />
-    </svg>
-  );
-}
 
 // ── Signal bar SVG icons ────────────────────────────────────────────────────
 function SignalFull({ color }) {
@@ -234,7 +222,7 @@ function MobileSourcePills({ sources, activeSrc, showDismissed, countFor, onSele
 
 // ── Shared card action strip ────────────────────────────────────────────────
 function CardActions({ article, isDismissed, summary, isSummarizing, isLiked, isDisliked,
-                       onSummarize, onDismiss, onUndismiss, onBlock, onLike, onDislike, onUnlike, onUndislike }) {
+                       onSummarize, onUndismiss, onLike, onDislike, onUnlike, onUndislike }) {
   return (
     <div style={{ display: "flex", alignItems: "center", padding: "4px 12px 10px", gap: 4 }}>
       <a
@@ -254,29 +242,81 @@ function CardActions({ article, isDismissed, summary, isSummarizing, isLiked, is
         }}>
         {isSummarizing ? <LoadingDots /> : summary ? "✓ Done" : "✦ AI"}
       </button>
+      {isDismissed && (
+        <button onClick={onUndismiss}
+          style={{ ...iconBtn, width: 33, height: 33, color: MC.muted, fontSize: 15, fontFamily: "inherit" }}>
+          ↩
+        </button>
+      )}
+      <div style={{ flex: 1 }} />
       <MobileSignal
         isLiked={isLiked} isDisliked={isDisliked}
         onLike={onLike} onDislike={onDislike}
         onUnlike={onUnlike} onUndislike={onUndislike}
       />
-      <div style={{ flex: 1 }} />
-      {isDismissed ? (
-        <button onClick={onUndismiss}
-          style={{ ...iconBtn, width: 33, height: 33, color: MC.muted, fontSize: 15, fontFamily: "inherit" }}>
-          ↩
-        </button>
-      ) : (
-        <>
-          <button onClick={onBlock}
-            style={{ ...iconBtn, width: 33, height: 33 }}>
-            <BlockIcon size={14} color={MC.red} />
-          </button>
-          <button onClick={onDismiss}
-            style={{ ...iconBtn, width: 33, height: 33, color: MC.muted, fontSize: 15, fontFamily: "inherit" }}>
-            ✕
-          </button>
-        </>
-      )}
+    </div>
+  );
+}
+
+// ── Swipe-right-to-dismiss wrapper ──────────────────────────────────────────
+const SWIPE_DISMISS_THRESHOLD = 90;
+
+function SwipeableCard({ onDismiss, disabled, children }) {
+  const [dragX, setDragX] = useState(0);
+  const [dragging, setDragging] = useState(false);
+  const start = useRef({ x: 0, y: 0 });
+  const axis = useRef(null);
+
+  const onTouchStart = (e) => {
+    if (disabled) return;
+    const t = e.touches[0];
+    start.current = { x: t.clientX, y: t.clientY };
+    axis.current = null;
+    setDragging(true);
+  };
+  const onTouchMove = (e) => {
+    if (disabled || !dragging) return;
+    const t = e.touches[0];
+    const dx = t.clientX - start.current.x;
+    const dy = t.clientY - start.current.y;
+    if (!axis.current) {
+      if (Math.abs(dx) < 6 && Math.abs(dy) < 6) return;
+      axis.current = Math.abs(dx) > Math.abs(dy) ? "x" : "y";
+    }
+    if (axis.current === "x") {
+      if (e.cancelable) e.preventDefault();
+      setDragX(Math.max(0, dx));
+    }
+  };
+  const onTouchEnd = () => {
+    if (disabled) return;
+    setDragging(false);
+    if (dragX > SWIPE_DISMISS_THRESHOLD) onDismiss();
+    setDragX(0);
+    axis.current = null;
+  };
+
+  return (
+    <div style={{ position: "relative", overflow: "hidden" }}>
+      <div style={{
+        position: "absolute", inset: 0, display: "flex", alignItems: "center",
+        padding: "0 18px", background: "rgba(224,82,82,0.14)", color: MC.red,
+        fontSize: 12, fontFamily: "'Noto Sans Nabataean', sans-serif",
+        opacity: dragX > 12 ? Math.min(1, dragX / SWIPE_DISMISS_THRESHOLD) : 0,
+      }}>
+        ✕ Dismiss
+      </div>
+      <div
+        onTouchStart={onTouchStart}
+        onTouchMove={onTouchMove}
+        onTouchEnd={onTouchEnd}
+        style={{
+          position: "relative",
+          transform: `translateX(${dragX}px)`,
+          transition: dragging ? "none" : "transform 0.2s ease",
+        }}>
+        {children}
+      </div>
     </div>
   );
 }
@@ -284,130 +324,148 @@ function CardActions({ article, isDismissed, summary, isSummarizing, isLiked, is
 // ── Feed article card ────────────────────────────────────────────────────────
 function MobileFeedCard({ article, isDismissed, isExpanded, summary, isSummarizing,
                           isLiked, isDisliked, onToggle, onSummarize,
-                          onDismiss, onUndismiss, onBlock, onLike, onDislike, onUnlike, onUndislike }) {
+                          onDismiss, onUndismiss, onLike, onDislike, onUnlike, onUndislike }) {
+  const [summaryOpen, setSummaryOpen] = useState(true);
   return (
-    <div style={{ background: MC.surf, borderBottom: `1px solid ${MC.border}`, opacity: isDismissed ? 0.55 : 1 }}>
-      {/* Tap header */}
-      <div onClick={onToggle} style={{ padding: "14px 16px 10px", cursor: "pointer", userSelect: "none" }}>
-        <div style={{ display: "flex", alignItems: "center", gap: 8, marginBottom: 8 }}>
-          <span style={{
-            fontSize: 9, padding: "2px 7px", borderRadius: 3,
-            letterSpacing: "0.08em", textTransform: "uppercase", fontWeight: 500,
-            color: article.sourceColor,
-            background: `${article.sourceColor}18`,
-            border: `1px solid ${article.sourceColor}30`,
-            flexShrink: 0, fontFamily: "'Noto Sans Nabataean', sans-serif",
+    <SwipeableCard onDismiss={onDismiss} disabled={isDismissed}>
+      <div style={{ background: MC.surf, borderBottom: `1px solid ${MC.border}`, opacity: isDismissed ? 0.55 : 1 }}>
+        {/* Tap header */}
+        <div onClick={onToggle} style={{ padding: "14px 16px 10px", cursor: "pointer", userSelect: "none" }}>
+          <div style={{ display: "flex", alignItems: "center", gap: 8, marginBottom: 8 }}>
+            <span style={{
+              fontSize: 9, padding: "2px 7px", borderRadius: 3,
+              letterSpacing: "0.08em", textTransform: "uppercase", fontWeight: 500,
+              color: article.sourceColor,
+              background: `${article.sourceColor}18`,
+              border: `1px solid ${article.sourceColor}30`,
+              flexShrink: 0, fontFamily: "'Noto Sans Nabataean', sans-serif",
+            }}>
+              {article.sourceName}
+            </span>
+            <span style={{ fontSize: 11, color: MC.muted, fontFamily: "'Noto Sans Nabataean', sans-serif" }}>
+              {ago(article.pubDate)}
+            </span>
+            <span style={{ marginLeft: "auto", fontSize: 11, color: MC.muted }}>
+              {isExpanded ? "▲" : "▼"}
+            </span>
+          </div>
+          <div style={{
+            fontFamily: "'Bitter', Georgia, serif",
+            fontSize: 16, lineHeight: 1.42, fontWeight: 600,
+            color: isDismissed ? MC.muted : MC.bright,
+            textDecoration: isDismissed ? "line-through" : "none",
+            display: "-webkit-box", WebkitLineClamp: isExpanded ? "unset" : 3,
+            WebkitBoxOrient: "vertical", overflow: isExpanded ? "visible" : "hidden",
           }}>
-            {article.sourceName}
-          </span>
-          <span style={{ fontSize: 11, color: MC.muted, fontFamily: "'Noto Sans Nabataean', sans-serif" }}>
-            {ago(article.pubDate)}
-          </span>
-          <span style={{ marginLeft: "auto", fontSize: 11, color: MC.muted }}>
-            {isExpanded ? "▲" : "▼"}
-          </span>
+            {article.title}
+          </div>
         </div>
-        <div style={{
-          fontFamily: "'Bitter', Georgia, serif",
-          fontSize: 16, lineHeight: 1.42, fontWeight: 600,
-          color: isDismissed ? MC.muted : MC.bright,
-          textDecoration: isDismissed ? "line-through" : "none",
-          display: "-webkit-box", WebkitLineClamp: isExpanded ? "unset" : 3,
-          WebkitBoxOrient: "vertical", overflow: isExpanded ? "visible" : "hidden",
-        }}>
-          {article.title}
-        </div>
+
+        {/* Excerpt (also expands/collapses the card) */}
+        {article.excerpt && (
+          <div onClick={onToggle} style={{
+            padding: "0 16px 10px", cursor: "pointer", userSelect: "none",
+            fontSize: 12, color: "#5d6680", lineHeight: 1.75,
+            fontFamily: "'Noto Sans Nabataean', sans-serif",
+            display: isExpanded ? "block" : "-webkit-box",
+            WebkitLineClamp: isExpanded ? "unset" : 2,
+            WebkitBoxOrient: "vertical", overflow: isExpanded ? "visible" : "hidden",
+          }}>
+            {article.excerpt}
+          </div>
+        )}
+
+        {/* AI summary (collapsible) */}
+        {summary && (
+          <div style={{ margin: "0 16px 10px", padding: "10px 12px", background: "rgba(232,135,75,0.06)", border: "1px solid rgba(232,135,75,0.18)", borderRadius: 7 }}>
+            <div
+              onClick={() => setSummaryOpen(o => !o)}
+              style={{ display: "flex", alignItems: "center", justifyContent: "space-between", cursor: "pointer", userSelect: "none", marginBottom: summaryOpen ? 4 : 0 }}>
+              <span style={{ fontSize: 9, color: MC.accent, textTransform: "uppercase", letterSpacing: "0.14em", fontFamily: "'Noto Sans Nabataean', sans-serif" }}>▸ AI Summary</span>
+              <span style={{ fontSize: 10, color: MC.muted, fontFamily: "'Noto Sans Nabataean', sans-serif" }}>{summaryOpen ? "Hide ▲" : "Show ▼"}</span>
+            </div>
+            {summaryOpen && (
+              <div style={{ fontSize: 12, color: MC.text, lineHeight: 1.7, fontFamily: "'Noto Sans Nabataean', sans-serif" }}>{summary}</div>
+            )}
+          </div>
+        )}
+
+        <CardActions
+          article={article} isDismissed={isDismissed}
+          summary={summary} isSummarizing={isSummarizing}
+          isLiked={isLiked} isDisliked={isDisliked}
+          onSummarize={onSummarize} onUndismiss={onUndismiss}
+          onLike={onLike} onDislike={onDislike} onUnlike={onUnlike} onUndislike={onUndislike}
+        />
       </div>
-
-      {/* Excerpt */}
-      {article.excerpt && (
-        <div style={{
-          padding: "0 16px 10px",
-          fontSize: 12, color: "#5d6680", lineHeight: 1.75,
-          fontFamily: "'Noto Sans Nabataean', sans-serif",
-          display: isExpanded ? "block" : "-webkit-box",
-          WebkitLineClamp: isExpanded ? "unset" : 2,
-          WebkitBoxOrient: "vertical", overflow: isExpanded ? "visible" : "hidden",
-        }}>
-          {article.excerpt}
-        </div>
-      )}
-
-      {/* AI summary */}
-      {summary && (
-        <div style={{ margin: "0 16px 10px", padding: "10px 12px", background: "rgba(232,135,75,0.06)", border: "1px solid rgba(232,135,75,0.18)", borderRadius: 7 }}>
-          <div style={{ fontSize: 9, color: MC.accent, textTransform: "uppercase", letterSpacing: "0.14em", marginBottom: 4, fontFamily: "'Noto Sans Nabataean', sans-serif" }}>▸ AI Summary</div>
-          <div style={{ fontSize: 12, color: MC.text, lineHeight: 1.7, fontFamily: "'Noto Sans Nabataean', sans-serif" }}>{summary}</div>
-        </div>
-      )}
-
-      <CardActions
-        article={article} isDismissed={isDismissed}
-        summary={summary} isSummarizing={isSummarizing}
-        isLiked={isLiked} isDisliked={isDisliked}
-        onSummarize={onSummarize} onDismiss={onDismiss} onUndismiss={onUndismiss}
-        onBlock={onBlock}
-        onLike={onLike} onDislike={onDislike} onUnlike={onUnlike} onUndislike={onUndislike}
-      />
-    </div>
+    </SwipeableCard>
   );
 }
 
 // ── Digest article card ──────────────────────────────────────────────────────
 function MobileDigestCard({ rank, pick, isExpanded, summary, isSummarizing,
                             isLiked, isDisliked, onToggle, onSummarize,
-                            onDismiss, onBlock, onLike, onDislike, onUnlike, onUndislike }) {
+                            onDismiss, onLike, onDislike, onUnlike, onUndislike }) {
   const { article, reason } = pick;
+  const [summaryOpen, setSummaryOpen] = useState(true);
   return (
-    <div style={{ background: MC.surf, borderBottom: `1px solid ${MC.border}` }}>
-      <div onClick={onToggle} style={{ padding: "14px 16px 10px", cursor: "pointer", userSelect: "none" }}>
-        <div style={{ display: "flex", alignItems: "center", gap: 8, marginBottom: 8 }}>
-          <span style={{ fontSize: 14, fontWeight: 700, color: MC.purple, minWidth: 24, fontFamily: "'Noto Sans Nabataean', sans-serif" }}>#{rank}</span>
-          <span style={{
-            fontSize: 9, padding: "2px 7px", borderRadius: 3, letterSpacing: "0.08em",
-            textTransform: "uppercase", fontWeight: 500,
-            color: article.sourceColor, background: `${article.sourceColor}18`,
-            border: `1px solid ${article.sourceColor}30`,
-            fontFamily: "'Noto Sans Nabataean', sans-serif",
-          }}>
-            {article.sourceName}
-          </span>
-          <span style={{ fontSize: 11, color: MC.muted, fontFamily: "'Noto Sans Nabataean', sans-serif" }}>{ago(article.pubDate)}</span>
-          <span style={{ marginLeft: "auto", fontSize: 11, color: MC.muted }}>{isExpanded ? "▲" : "▼"}</span>
+    <SwipeableCard onDismiss={onDismiss}>
+      <div style={{ background: MC.surf, borderBottom: `1px solid ${MC.border}` }}>
+        <div onClick={onToggle} style={{ padding: "14px 16px 10px", cursor: "pointer", userSelect: "none" }}>
+          <div style={{ display: "flex", alignItems: "center", gap: 8, marginBottom: 8 }}>
+            <span style={{ fontSize: 14, fontWeight: 700, color: MC.purple, minWidth: 24, fontFamily: "'Noto Sans Nabataean', sans-serif" }}>#{rank}</span>
+            <span style={{
+              fontSize: 9, padding: "2px 7px", borderRadius: 3, letterSpacing: "0.08em",
+              textTransform: "uppercase", fontWeight: 500,
+              color: article.sourceColor, background: `${article.sourceColor}18`,
+              border: `1px solid ${article.sourceColor}30`,
+              fontFamily: "'Noto Sans Nabataean', sans-serif",
+            }}>
+              {article.sourceName}
+            </span>
+            <span style={{ fontSize: 11, color: MC.muted, fontFamily: "'Noto Sans Nabataean', sans-serif" }}>{ago(article.pubDate)}</span>
+            <span style={{ marginLeft: "auto", fontSize: 11, color: MC.muted }}>{isExpanded ? "▲" : "▼"}</span>
+          </div>
+          <div style={{ fontFamily: "'Bitter', Georgia, serif", fontSize: 16, lineHeight: 1.42, fontWeight: 600, color: MC.bright, marginBottom: 6 }}>
+            {article.title}
+          </div>
+          <div style={{ fontSize: 12, color: MC.purple, lineHeight: 1.55, fontStyle: "italic", fontFamily: "'Bitter', Georgia, serif" }}>
+            {reason}
+          </div>
         </div>
-        <div style={{ fontFamily: "'Bitter', Georgia, serif", fontSize: 16, lineHeight: 1.42, fontWeight: 600, color: MC.bright, marginBottom: 6 }}>
-          {article.title}
-        </div>
-        <div style={{ fontSize: 12, color: MC.purple, lineHeight: 1.55, fontStyle: "italic", fontFamily: "'Bitter', Georgia, serif" }}>
-          {reason}
-        </div>
+        {isExpanded && article.excerpt && (
+          <div onClick={onToggle} style={{ padding: "0 16px 10px", cursor: "pointer", userSelect: "none", fontSize: 12, color: "#5d6680", lineHeight: 1.75, fontFamily: "'Noto Sans Nabataean', sans-serif" }}>
+            {article.excerpt}
+          </div>
+        )}
+        {summary && (
+          <div style={{ margin: "0 16px 10px", padding: "10px 12px", background: "rgba(232,135,75,0.06)", border: "1px solid rgba(232,135,75,0.18)", borderRadius: 7 }}>
+            <div
+              onClick={() => setSummaryOpen(o => !o)}
+              style={{ display: "flex", alignItems: "center", justifyContent: "space-between", cursor: "pointer", userSelect: "none", marginBottom: summaryOpen ? 4 : 0 }}>
+              <span style={{ fontSize: 9, color: MC.accent, textTransform: "uppercase", letterSpacing: "0.14em", fontFamily: "'Noto Sans Nabataean', sans-serif" }}>▸ AI Summary</span>
+              <span style={{ fontSize: 10, color: MC.muted, fontFamily: "'Noto Sans Nabataean', sans-serif" }}>{summaryOpen ? "Hide ▲" : "Show ▼"}</span>
+            </div>
+            {summaryOpen && (
+              <div style={{ fontSize: 12, color: MC.text, lineHeight: 1.7, fontFamily: "'Noto Sans Nabataean', sans-serif" }}>{summary}</div>
+            )}
+          </div>
+        )}
+        <CardActions
+          article={article} isDismissed={false}
+          summary={summary} isSummarizing={isSummarizing}
+          isLiked={isLiked} isDisliked={isDisliked}
+          onSummarize={onSummarize} onUndismiss={() => {}}
+          onLike={onLike} onDislike={onDislike} onUnlike={onUnlike} onUndislike={onUndislike}
+        />
       </div>
-      {isExpanded && article.excerpt && (
-        <div style={{ padding: "0 16px 10px", fontSize: 12, color: "#5d6680", lineHeight: 1.75, fontFamily: "'Noto Sans Nabataean', sans-serif" }}>
-          {article.excerpt}
-        </div>
-      )}
-      {summary && (
-        <div style={{ margin: "0 16px 10px", padding: "10px 12px", background: "rgba(232,135,75,0.06)", border: "1px solid rgba(232,135,75,0.18)", borderRadius: 7 }}>
-          <div style={{ fontSize: 9, color: MC.accent, textTransform: "uppercase", letterSpacing: "0.14em", marginBottom: 4, fontFamily: "'Noto Sans Nabataean', sans-serif" }}>▸ AI Summary</div>
-          <div style={{ fontSize: 12, color: MC.text, lineHeight: 1.7, fontFamily: "'Noto Sans Nabataean', sans-serif" }}>{summary}</div>
-        </div>
-      )}
-      <CardActions
-        article={article} isDismissed={false}
-        summary={summary} isSummarizing={isSummarizing}
-        isLiked={isLiked} isDisliked={isDisliked}
-        onSummarize={onSummarize} onDismiss={onDismiss} onUndismiss={() => {}}
-        onBlock={onBlock}
-        onLike={onLike} onDislike={onDislike} onUnlike={onUnlike} onUndislike={onUndislike}
-      />
-    </div>
+    </SwipeableCard>
   );
 }
 
 // ── Digest tab ───────────────────────────────────────────────────────────────
 function MobileDigestView({ digest, loading, dismissed, summaries, summarizing, expandedId,
-                            likedIds, dislikedIds, onToggle, onSummarize, onDismiss, onBlock,
+                            likedIds, dislikedIds, onToggle, onSummarize, onDismiss,
                             onLike, onDislike, onUnlike, onUndislike, onRegenerate }) {
   if (loading) {
     return (
@@ -460,7 +518,6 @@ function MobileDigestView({ digest, loading, dismissed, summaries, summarizing, 
           onToggle={() => onToggle(pick.article.id)}
           onSummarize={() => onSummarize(pick.article)}
           onDismiss={() => onDismiss(pick.article.id)}
-          onBlock={() => onBlock(pick.article.link)}
           onLike={() => onLike(pick.article)}
           onDislike={() => onDislike(pick.article)}
           onUnlike={() => onUnlike(pick.article.id)}
@@ -708,7 +765,6 @@ export default function MobileApp({
                   onSummarize={() => onSummarize(article)}
                   onDismiss={() => onDismiss(article.id)}
                   onUndismiss={() => onUndismiss(article.id)}
-                  onBlock={() => onBlock(article.link)}
                   onLike={() => onLike(article)}
                   onDislike={() => onDislike(article)}
                   onUnlike={() => onUnlike(article.id)}
@@ -727,7 +783,7 @@ export default function MobileApp({
           summaries={summaries} summarizing={summarizing}
           expandedId={expandedId} likedIds={likedIds} dislikedIds={dislikedIds}
           onToggle={id => setExpandedId(expandedId === id ? null : id)}
-          onSummarize={onSummarize} onDismiss={onDismiss} onBlock={onBlock}
+          onSummarize={onSummarize} onDismiss={onDismiss}
           onLike={onLike} onDislike={onDislike}
           onUnlike={onUnlike} onUndislike={onUndislike}
           onRegenerate={onRunDigest}
