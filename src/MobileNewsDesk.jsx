@@ -118,9 +118,10 @@ function MobileSignal({ isLiked, isDisliked, onLike, onDislike, onUnlike, onUndi
 function MobileTopBar({ tab, unreadCount, fetching, onRefresh }) {
   return (
     <div style={{
-      height: 56, flexShrink: 0,
+      height: "calc(56px + env(safe-area-inset-top, 0px))",
+      flexShrink: 0, boxSizing: "border-box",
       display: "flex", alignItems: "center", justifyContent: "space-between",
-      padding: "0 16px",
+      padding: "env(safe-area-inset-top, 0px) 16px 0",
       background: MC.surf, borderBottom: `1px solid ${MC.border}`,
     }}>
       <div style={{ display: "flex", alignItems: "center", gap: 9 }}>
@@ -655,18 +656,18 @@ function MobileBottomNav({ tab, onTab }) {
     <nav style={{
       display: "flex", flexShrink: 0,
       background: MC.surf, borderTop: `1px solid ${MC.border}`,
-      paddingBottom: "env(safe-area-inset-bottom, 0px)",
+      paddingBottom: "max(env(safe-area-inset-bottom, 0px), 10px)",
     }}>
       {tabs.map(({ id, label, Icon }) => (
         <button key={id} onClick={() => onTab(id)}
           style={{
-            flex: 1, height: 56,
-            display: "flex", flexDirection: "column", alignItems: "center", justifyContent: "center", gap: 5,
+            flex: 1, height: 72,
+            display: "flex", flexDirection: "column", alignItems: "center", justifyContent: "center", gap: 6,
             background: "transparent", border: "none", cursor: "pointer",
             color: tab === id ? MC.accent : MC.muted, transition: "color 0.15s",
           }}>
           <Icon active={tab === id} />
-          <span style={{ fontSize: 9, letterSpacing: "0.08em", textTransform: "uppercase", fontFamily: "'Noto Sans Nabataean', sans-serif" }}>
+          <span style={{ fontSize: 10, letterSpacing: "0.08em", textTransform: "uppercase", fontFamily: "'Noto Sans Nabataean', sans-serif" }}>
             {label}
           </span>
         </button>
