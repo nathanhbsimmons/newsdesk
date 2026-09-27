@@ -250,16 +250,49 @@ describe("buildObsidianClipUrl()", () => {
     excerpt: "An excerpt.",
   };
 
+  beforeEach(() => {
+    vi.useFakeTimers();
+    vi.setSystemTime(new Date("2024-06-15T12:00:00Z"));
+  });
+  afterEach(() => {
+    vi.useRealTimers();
+  });
+
   it("builds a shortcuts://run-shortcut URL with name, input=text, and text params", () => {
     const url = buildObsidianClipUrl(article);
     const parsed = new URL(url.replace("shortcuts://", "https://"));
     expect(url.startsWith("shortcuts://run-shortcut?")).toBe(true);
     expect(parsed.searchParams.get("name")).toBe("Clip to Obsidian");
     expect(parsed.searchParams.get("input")).toBe("text");
+  });
+
+  it("payload's first line is the sanitized filename, matching the vault's Reading List Template frontmatter", () => {
+    const url = buildObsidianClipUrl(article);
+    const parsed = new URL(url.replace("shortcuts://", "https://"));
     const text = parsed.searchParams.get("text");
-    expect(text).toContain("Test Title");
-    expect(text).toContain("https://example.com/a");
-    expect(text).toContain("TLDR");
+    const lines = text.split("\n");
+    expect(lines[0]).toBe("Test Title");
+    expect(lines[1]).toBe("---");
+    expect(lines).toContain('title: "Test Title"');
+    expect(lines).toContain('url: "https://example.com/a"');
+    expect(lines).toContain("status: unread");
+    expect(lines).toContain('clipped: "2024-06-15"');
+    expect(lines).toContain("tags:");
+    expect(lines).toContain("  - reading-list");
+    expect(text).toContain("An excerpt.");
+  });
+
+  it("strips filesystem-illegal characters from the derived filename", () => {
+    const url = buildObsidianClipUrl({ ...article, title: 'A/B: "Weird" Title?' });
+    const parsed = new URL(url.replace("shortcuts://", "https://"));
+    const filename = parsed.searchParams.get("text").split("\n")[0];
+    expect(filename).not.toMatch(/[\\/:*?"<>|]/);
+  });
+
+  it("escapes double quotes in the title frontmatter value", () => {
+    const url = buildObsidianClipUrl({ ...article, title: 'Say "Hi"' });
+    const parsed = new URL(url.replace("shortcuts://", "https://"));
+    expect(parsed.searchParams.get("text")).toContain('title: "Say \\"Hi\\""');
   });
 
   it("accepts a custom shortcut name", () => {

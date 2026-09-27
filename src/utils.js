@@ -106,19 +106,38 @@ export function orderArticles(filteredList, { shuffledIds } = {}) {
 
 export const OBSIDIAN_SHORTCUT_NAME = "Clip to Obsidian";
 
+// Matches the vault's "Reading List Template.md" frontmatter shape exactly:
+// title/url/status/clipped/tags, illegal filename chars stripped for the
+// derived .md filename. "clipped" is the clip date (today), not pubDate.
+function sanitizeObsidianFilename(title) {
+  return (title || "Untitled")
+    .replace(/[\\/:*?"<>|]/g, "")
+    .replace(/\s+/g, " ")
+    .trim()
+    .slice(0, 180);
+}
+
 export function buildObsidianClipUrl(article, shortcutName = OBSIDIAN_SHORTCUT_NAME) {
-  const lines = [
-    `# ${article.title}`,
+  const filename = sanitizeObsidianFilename(article.title);
+  const clipped = new Date().toISOString().slice(0, 10);
+  const frontmatter = [
+    "---",
+    `title: "${(article.title || "").replace(/"/g, '\\"')}"`,
+    `url: "${article.link || ""}"`,
+    "status: unread",
+    `clipped: "${clipped}"`,
+    "tags:",
+    "  - reading-list",
+    "---",
     "",
-    `Source: ${article.sourceName}`,
-    `Link: ${article.link}`,
-    article.pubDate ? `Date: ${new Date(article.pubDate).toLocaleDateString()}` : null,
-    "",
-    article.excerpt || "",
-  ].filter(Boolean);
+    article.excerpt || article.content || "",
+  ].join("\n");
+  // First line is the derived filename (sanitized, no quotes/YAML), the
+  // Shortcut splits it off before writing the rest as the note's contents.
+  const payload = [filename, frontmatter].join("\n");
   // URLSearchParams encodes spaces as "+" (form-encoding), but shortcuts://
   // expects standard percent-encoding (%20) — encode manually to avoid that.
-  const params = { name: shortcutName, input: "text", text: lines.join("\n") };
+  const params = { name: shortcutName, input: "text", text: payload };
   const query = Object.entries(params).map(([k, v]) => `${k}=${encodeURIComponent(v)}`).join("&");
   return `shortcuts://run-shortcut?${query}`;
 }
