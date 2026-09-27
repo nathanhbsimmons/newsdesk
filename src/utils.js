@@ -130,7 +130,7 @@ export function buildObsidianClipUrl(article, shortcutName = OBSIDIAN_SHORTCUT_N
     "  - reading-list",
     "---",
     "",
-    article.excerpt || article.content || "",
+    article.content || article.excerpt || "",
   ].join("\n");
   // First line is the derived filename (sanitized, no quotes/YAML), the
   // Shortcut splits it off before writing the rest as the note's contents.
