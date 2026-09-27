@@ -18,7 +18,7 @@ function LoadingDots() {
     </span>
   );
 }
-import { ago } from "./utils.js";
+import { ago, isWithinWindow, orderArticles, buildObsidianClipUrl } from "./utils.js";
 
 const getDomain = (url) => {
   try { return new URL(url).hostname.replace(/^www\./, ""); } catch { return null; }
@@ -36,6 +36,7 @@ const MC = {
   red:    "#e05252",
   purple: "#a78bfa",
   green:  "#4ade80",
+  obsidian: "#9b6dff",
 };
 
 // ── Shared style objects ────────────────────────────────────────────────────
@@ -115,7 +116,7 @@ function MobileSignal({ isLiked, isDisliked, onLike, onDislike, onUnlike, onUndi
 }
 
 // ── Top app bar ─────────────────────────────────────────────────────────────
-function MobileTopBar({ tab, unreadCount, fetching, onRefresh }) {
+function MobileTopBar({ tab, unreadCount, fetching, onRefresh, activeSrc, showDismissed, onShuffle }) {
   return (
     <div style={{
       height: "calc(56px + env(safe-area-inset-top, 0px))",
@@ -152,6 +153,13 @@ function MobileTopBar({ tab, unreadCount, fetching, onRefresh }) {
           }}>
             ✦ digest
           </span>
+        )}
+        {tab === "feed" && !activeSrc && !showDismissed && (
+          <button
+            onClick={onShuffle}
+            style={{ ...iconBtn, width: 36, height: 36, fontSize: 15, fontFamily: "inherit" }}>
+            🔀
+          </button>
         )}
         <button
           onClick={onRefresh}
@@ -222,7 +230,7 @@ function MobileSourcePills({ sources, activeSrc, showDismissed, countFor, onSele
 }
 
 // ── Shared card action strip ────────────────────────────────────────────────
-function CardActions({ article, isDismissed, summary, isSummarizing, isLiked, isDisliked,
+function CardActions({ article, isDismissed, summary, isSummarizing, summaryError, isLiked, isDisliked,
                        onSummarize, onUndismiss, onLike, onDislike, onUnlike, onUndislike }) {
   return (
     <div style={{ display: "flex", alignItems: "center", padding: "4px 12px 10px", gap: 4 }}>
@@ -231,18 +239,20 @@ function CardActions({ article, isDismissed, summary, isSummarizing, isLiked, is
         style={{ ...rowBtn, color: MC.text, textDecoration: "none", borderColor: MC.border }}>
         ↗ Read
       </a>
-      <button
-        onClick={onSummarize}
-        disabled={!!summary || isSummarizing}
-        style={{
-          ...rowBtn, color: MC.accent,
-          borderColor: summary ? "rgba(232,135,75,0.25)" : "rgba(232,135,75,0.3)",
-          background:  summary ? "rgba(232,135,75,0.06)" : "transparent",
-          opacity: (!!summary || isSummarizing) ? 0.65 : 1,
-          cursor: (!!summary || isSummarizing) ? "default" : "pointer",
-        }}>
-        {isSummarizing ? <LoadingDots /> : summary ? "✓ Done" : "✦ AI"}
-      </button>
+      {!summary && (
+        <button
+          onClick={onSummarize}
+          disabled={isSummarizing}
+          style={{
+            ...rowBtn, color: MC.accent,
+            borderColor: "rgba(232,135,75,0.3)",
+            background: "transparent",
+            opacity: isSummarizing ? 0.65 : 1,
+            cursor: isSummarizing ? "default" : "pointer",
+          }}>
+          {isSummarizing ? <LoadingDots /> : summaryError ? "⚠ Retry" : "✦ AI"}
+        </button>
+      )}
       {isDismissed && (
         <button onClick={onUndismiss}
           style={{ ...iconBtn, width: 33, height: 33, color: MC.muted, fontSize: 15, fontFamily: "inherit" }}>
@@ -261,8 +271,9 @@ function CardActions({ article, isDismissed, summary, isSummarizing, isLiked, is
 
 // ── Swipe-right-to-dismiss wrapper ──────────────────────────────────────────
 const SWIPE_DISMISS_THRESHOLD = 90;
+const SWIPE_CLIP_THRESHOLD = 90;
 
-function SwipeableCard({ onDismiss, disabled, children }) {
+function SwipeableCard({ onDismiss, onSwipeLeft, disabled, children }) {
   const [dragX, setDragX] = useState(0);
   const [dragging, setDragging] = useState(false);
   const start = useRef({ x: 0, y: 0 });
@@ -286,13 +297,14 @@ function SwipeableCard({ onDismiss, disabled, children }) {
     }
     if (axis.current === "x") {
       if (e.cancelable) e.preventDefault();
-      setDragX(Math.max(0, dx));
+      setDragX(Math.max(-140, Math.min(140, dx)));
     }
   };
   const onTouchEnd = () => {
     if (disabled) return;
     setDragging(false);
     if (dragX > SWIPE_DISMISS_THRESHOLD) onDismiss();
+    else if (dragX < -SWIPE_CLIP_THRESHOLD && onSwipeLeft) onSwipeLeft();
     setDragX(0);
     axis.current = null;
   };
@@ -306,6 +318,14 @@ function SwipeableCard({ onDismiss, disabled, children }) {
         opacity: dragX > 12 ? Math.min(1, dragX / SWIPE_DISMISS_THRESHOLD) : 0,
       }}>
         ✕ Dismiss
+      </div>
+      <div style={{
+        position: "absolute", inset: 0, display: "flex", alignItems: "center", justifyContent: "flex-end",
+        padding: "0 18px", background: "rgba(155,109,255,0.14)", color: MC.obsidian,
+        fontSize: 12, fontFamily: "'Noto Sans Nabataean', sans-serif",
+        opacity: dragX < -12 ? Math.min(1, -dragX / SWIPE_CLIP_THRESHOLD) : 0,
+      }}>
+        📤 Clip to Obsidian
       </div>
       <div
         onTouchStart={onTouchStart}
@@ -323,12 +343,12 @@ function SwipeableCard({ onDismiss, disabled, children }) {
 }
 
 // ── Feed article card ────────────────────────────────────────────────────────
-function MobileFeedCard({ article, isDismissed, isExpanded, summary, isSummarizing,
+function MobileFeedCard({ article, isDismissed, isExpanded, summary, isSummarizing, summaryError,
                           isLiked, isDisliked, onToggle, onSummarize,
-                          onDismiss, onUndismiss, onLike, onDislike, onUnlike, onUndislike }) {
+                          onDismiss, onUndismiss, onSwipeLeft, onLike, onDislike, onUnlike, onUndislike }) {
   const [summaryOpen, setSummaryOpen] = useState(true);
   return (
-    <SwipeableCard onDismiss={onDismiss} disabled={isDismissed}>
+    <SwipeableCard onDismiss={onDismiss} onSwipeLeft={onSwipeLeft} disabled={isDismissed}>
       <div style={{ background: MC.surf, borderBottom: `1px solid ${MC.border}`, opacity: isDismissed ? 0.55 : 1 }}>
         {/* Tap header */}
         <div onClick={onToggle} style={{ padding: "14px 16px 10px", cursor: "pointer", userSelect: "none" }}>
@@ -393,7 +413,7 @@ function MobileFeedCard({ article, isDismissed, isExpanded, summary, isSummarizi
 
         <CardActions
           article={article} isDismissed={isDismissed}
-          summary={summary} isSummarizing={isSummarizing}
+          summary={summary} isSummarizing={isSummarizing} summaryError={summaryError}
           isLiked={isLiked} isDisliked={isDisliked}
           onSummarize={onSummarize} onUndismiss={onUndismiss}
           onLike={onLike} onDislike={onDislike} onUnlike={onUnlike} onUndislike={onUndislike}
@@ -404,13 +424,13 @@ function MobileFeedCard({ article, isDismissed, isExpanded, summary, isSummarizi
 }
 
 // ── Digest article card ──────────────────────────────────────────────────────
-function MobileDigestCard({ rank, pick, isExpanded, summary, isSummarizing,
+function MobileDigestCard({ rank, pick, isExpanded, summary, isSummarizing, summaryError,
                             isLiked, isDisliked, onToggle, onSummarize,
-                            onDismiss, onLike, onDislike, onUnlike, onUndislike }) {
+                            onDismiss, onSwipeLeft, onLike, onDislike, onUnlike, onUndislike }) {
   const { article, reason } = pick;
   const [summaryOpen, setSummaryOpen] = useState(true);
   return (
-    <SwipeableCard onDismiss={onDismiss}>
+    <SwipeableCard onDismiss={onDismiss} onSwipeLeft={onSwipeLeft}>
       <div style={{ background: MC.surf, borderBottom: `1px solid ${MC.border}` }}>
         <div onClick={onToggle} style={{ padding: "14px 16px 10px", cursor: "pointer", userSelect: "none" }}>
           <div style={{ display: "flex", alignItems: "center", gap: 8, marginBottom: 8 }}>
@@ -454,7 +474,7 @@ function MobileDigestCard({ rank, pick, isExpanded, summary, isSummarizing,
         )}
         <CardActions
           article={article} isDismissed={false}
-          summary={summary} isSummarizing={isSummarizing}
+          summary={summary} isSummarizing={isSummarizing} summaryError={summaryError}
           isLiked={isLiked} isDisliked={isDisliked}
           onSummarize={onSummarize} onUndismiss={() => {}}
           onLike={onLike} onDislike={onDislike} onUnlike={onUnlike} onUndislike={onUndislike}
@@ -465,8 +485,8 @@ function MobileDigestCard({ rank, pick, isExpanded, summary, isSummarizing,
 }
 
 // ── Digest tab ───────────────────────────────────────────────────────────────
-function MobileDigestView({ digest, loading, dismissed, summaries, summarizing, expandedId,
-                            likedIds, dislikedIds, onToggle, onSummarize, onDismiss,
+function MobileDigestView({ digest, loading, dismissed, summaries, summarizing, summaryErrors, expandedId,
+                            likedIds, dislikedIds, onToggle, onSummarize, onDismiss, onSwipeLeft,
                             onLike, onDislike, onUnlike, onUndislike, onRegenerate }) {
   if (loading) {
     return (
@@ -514,11 +534,13 @@ function MobileDigestView({ digest, loading, dismissed, summaries, summarizing, 
           isExpanded={expandedId === pick.article.id}
           summary={summaries[pick.article.id]}
           isSummarizing={summarizing[pick.article.id]}
+          summaryError={summaryErrors?.[pick.article.id]}
           isLiked={likedIds?.has(pick.article.id)}
           isDisliked={dislikedIds?.has(pick.article.id)}
           onToggle={() => onToggle(pick.article.id)}
           onSummarize={() => onSummarize(pick.article)}
           onDismiss={() => onDismiss(pick.article.id)}
+          onSwipeLeft={() => onSwipeLeft(pick.article)}
           onLike={() => onLike(pick.article)}
           onDislike={() => onDislike(pick.article)}
           onUnlike={() => onUnlike(pick.article.id)}
@@ -681,7 +703,8 @@ function MobileBottomNav({ tab, onTab }) {
 export default function MobileApp({
   sources, articles, dismissed, blocked, srcStatus, fetching,
   activeSrc, setActiveSrc, showDismissed, setShowDismissed,
-  summaries, summarizing, expandedId, setExpandedId,
+  summaries, summarizing, summaryErrors, shuffledIds, onShuffle,
+  expandedId, setExpandedId,
   showAdd, setShowAdd, newName, setNewName, newUrl, setNewUrl,
   digest, digestLoading, prefs,
   onAddSource, onRemoveSource, onReorderSource, onRefresh,
@@ -699,13 +722,15 @@ export default function MobileApp({
     if (t === "digest" && !digest && !digestLoading) onRunDigest();
   };
 
-  const visible = articles.filter(a => {
+  const filtered = articles.filter(a => {
     if (showDismissed) return dismissed.has(a.id);
     if (dismissed.has(a.id)) return false;
     if (blocked && blocked.has(getDomain(a.link))) return false;
     if (activeSrc && a.sourceId !== activeSrc) return false;
+    if (!isWithinWindow(a.pubDate, activeSrc)) return false;
     return true;
   });
+  const visible = (!activeSrc && !showDismissed) ? orderArticles(filtered, { shuffledIds }) : filtered;
 
   return (
     <div style={{
@@ -718,6 +743,9 @@ export default function MobileApp({
         unreadCount={countFor(activeSrc)}
         fetching={fetching}
         onRefresh={onRefresh}
+        activeSrc={activeSrc}
+        showDismissed={showDismissed}
+        onShuffle={onShuffle}
       />
 
       {/* ── Feed tab ── */}
@@ -760,12 +788,14 @@ export default function MobileApp({
                   isExpanded={expandedId === article.id}
                   summary={summaries[article.id]}
                   isSummarizing={summarizing[article.id]}
+                  summaryError={summaryErrors?.[article.id]}
                   isLiked={likedIds.has(article.id)}
                   isDisliked={dislikedIds.has(article.id)}
                   onToggle={() => setExpandedId(expandedId === article.id ? null : article.id)}
                   onSummarize={() => onSummarize(article)}
                   onDismiss={() => onDismiss(article.id)}
                   onUndismiss={() => onUndismiss(article.id)}
+                  onSwipeLeft={() => { window.location.href = buildObsidianClipUrl(article); }}
                   onLike={() => onLike(article)}
                   onDislike={() => onDislike(article)}
                   onUnlike={() => onUnlike(article.id)}
@@ -781,10 +811,11 @@ export default function MobileApp({
       {tab === "digest" && (
         <MobileDigestView
           digest={digest} loading={digestLoading} dismissed={dismissed}
-          summaries={summaries} summarizing={summarizing}
+          summaries={summaries} summarizing={summarizing} summaryErrors={summaryErrors}
           expandedId={expandedId} likedIds={likedIds} dislikedIds={dislikedIds}
           onToggle={id => setExpandedId(expandedId === id ? null : id)}
           onSummarize={onSummarize} onDismiss={onDismiss}
+          onSwipeLeft={article => { window.location.href = buildObsidianClipUrl(article); }}
           onLike={onLike} onDislike={onDislike}
           onUnlike={onUnlike} onUndislike={onUndislike}
           onRegenerate={onRunDigest}

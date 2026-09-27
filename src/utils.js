@@ -41,3 +41,81 @@ export const ago = (d) => {
   if (s < 86400) return `${Math.floor(s / 3600)}h ago`;
   return `${Math.floor(s / 86400)}d ago`;
 };
+
+export const DAY_MS = 86_400_000;
+export const ALL_SOURCES_WINDOW_DAYS = 14;
+export const SINGLE_SOURCE_WINDOW_DAYS = 30;
+
+export function isWithinWindow(pubDate, activeSrc) {
+  const days = activeSrc ? SINGLE_SOURCE_WINDOW_DAYS : ALL_SOURCES_WINDOW_DAYS;
+  const t = new Date(pubDate).getTime();
+  if (Number.isNaN(t)) return true; // fail-open on unparsable dates
+  return t >= Date.now() - days * DAY_MS;
+}
+
+export function shuffleArray(items) {
+  const a = [...items];
+  for (let i = a.length - 1; i > 0; i--) {
+    const j = Math.floor(Math.random() * (i + 1));
+    [a[i], a[j]] = [a[j], a[i]];
+  }
+  return a;
+}
+
+export function declusterBySource(items, { maxRun = 2, sourceKey = "sourceId" } = {}) {
+  if (items.length <= maxRun) return items;
+  const queues = new Map();
+  items.forEach((item, i) => {
+    const key = item[sourceKey];
+    if (!queues.has(key)) queues.set(key, []);
+    queues.get(key).push({ item, i });
+  });
+  const result = [];
+  let lastKey = null, runLength = 0, remaining = items.length;
+  while (remaining > 0) {
+    let bestKey = null, bestIndex = Infinity;
+    for (const [key, q] of queues) {
+      if (q.length === 0) continue;
+      if (key === lastKey && runLength >= maxRun) continue;
+      if (q[0].i < bestIndex) { bestIndex = q[0].i; bestKey = key; }
+    }
+    if (bestKey === null) {
+      for (const [key, q] of queues) {
+        if (q.length && q[0].i < bestIndex) { bestIndex = q[0].i; bestKey = key; }
+      }
+    }
+    const { item } = queues.get(bestKey).shift();
+    result.push(item);
+    remaining--;
+    if (bestKey === lastKey) runLength++; else { lastKey = bestKey; runLength = 1; }
+  }
+  return result;
+}
+
+// Applies shuffle snapshot if present, else chronological+decluttered default.
+// Re-decluttering on top of the snapshot self-heals if a dismiss/refresh broke
+// the max-run rule, and folds in any items missing from the snapshot.
+export function orderArticles(filteredList, { shuffledIds } = {}) {
+  if (!shuffledIds) return declusterBySource(filteredList);
+  const byId = new Map(filteredList.map(a => [a.id, a]));
+  const known = shuffledIds.map(id => byId.get(id)).filter(Boolean);
+  const knownSet = new Set(shuffledIds);
+  const extra = filteredList.filter(a => !knownSet.has(a.id));
+  return declusterBySource([...known, ...extra]);
+}
+
+export const OBSIDIAN_SHORTCUT_NAME = "Clip to Obsidian";
+
+export function buildObsidianClipUrl(article, shortcutName = OBSIDIAN_SHORTCUT_NAME) {
+  const lines = [
+    `# ${article.title}`,
+    "",
+    `Source: ${article.sourceName}`,
+    `Link: ${article.link}`,
+    article.pubDate ? `Date: ${new Date(article.pubDate).toLocaleDateString()}` : null,
+    "",
+    article.excerpt || "",
+  ].filter(Boolean);
+  const params = new URLSearchParams({ name: shortcutName, input: "text", text: lines.join("\n") });
+  return `shortcuts://run-shortcut?${params.toString()}`;
+}

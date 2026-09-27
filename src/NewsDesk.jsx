@@ -1,5 +1,5 @@
 import { useState, useEffect } from "react";
-import { strip, ago, isEnglish } from "./utils.js";
+import { strip, ago, isEnglish, isWithinWindow, shuffleArray, declusterBySource, orderArticles } from "./utils.js";
 import MobileApp from "./MobileNewsDesk.jsx";
 
 function useIsMobile() {
@@ -61,6 +61,9 @@ export default function NewsDesk() {
   const [showDigest, setShowDigest]   = useState(false);
   const [summaries, setSummaries]     = useState({});
   const [summarizing, setSummarizing] = useState({});
+  const [summaryErrors, setSummaryErrors] = useState({});
+  const [shuffledIds, setShuffledIds] = useState(null);
+  const [sourcesVersion, setSourcesVersion] = useState(0);
   const [expandedId, setExpandedId]   = useState(null);
   const [showAdd, setShowAdd]         = useState(false);
   const [newName, setNewName]         = useState("");
@@ -291,6 +294,7 @@ export default function NewsDesk() {
 
   const summarize = async (article) => {
     setSummarizing(p => ({ ...p, [article.id]: true }));
+    setSummaryErrors(p => { const n = { ...p }; delete n[article.id]; return n; });
     try {
       const res = await fetch("/api/summarize", {
         method: "POST",
@@ -298,9 +302,13 @@ export default function NewsDesk() {
         body: JSON.stringify({ title: article.title, content: article.content, link: article.link }),
       });
       const data = await res.json();
-      setSummaries(p => ({ ...p, [article.id]: data.summary || data.error || "Failed to summarize." }));
+      if (data.summary) {
+        setSummaries(p => ({ ...p, [article.id]: data.summary }));
+      } else {
+        setSummaryErrors(p => ({ ...p, [article.id]: data.error || "Failed to summarize." }));
+      }
     } catch {
-      setSummaries(p => ({ ...p, [article.id]: "Summary unavailable." }));
+      setSummaryErrors(p => ({ ...p, [article.id]: "Summary unavailable." }));
     } finally {
       setSummarizing(p => ({ ...p, [article.id]: false }));
     }
@@ -347,6 +355,7 @@ export default function NewsDesk() {
     try { localStorage.setItem(K_SRC, JSON.stringify(next)); } catch {}
     syncSourcesRemote(next);
     setNewName(""); setNewUrl(""); setShowAdd(false); setTick(t => t + 1);
+    setSourcesVersion(v => v + 1);
   };
 
   const removeSource = (id) => {
@@ -355,6 +364,7 @@ export default function NewsDesk() {
     try { localStorage.setItem(K_SRC, JSON.stringify(next)); } catch {}
     syncSourcesRemote(next);
     if (activeSrc === id) setActiveSrc(null);
+    setSourcesVersion(v => v + 1);
   };
 
   const reorderSources = (fromId, toId) => {
@@ -377,8 +387,23 @@ export default function NewsDesk() {
     if (isPaywalled(a)) return false;
     if (!isEnglish(a.title + " " + (a.excerpt || ""))) return false;
     if (id && a.sourceId !== id) return false;
+    if (!isWithinWindow(a.pubDate, id)) return false;
     return true;
   }).length;
+
+  useEffect(() => { setShuffledIds(null); }, [sourcesVersion, tick]);
+
+  const allSourcesVisible = articles.filter(a => {
+    if (dismissed.has(a.id)) return false;
+    if (blocked.has(getDomain(a.link))) return false;
+    if (isPaywalled(a)) return false;
+    if (!isEnglish(a.title + " " + (a.excerpt || ""))) return false;
+    if (!isWithinWindow(a.pubDate, null)) return false;
+    return true;
+  });
+  const shuffle = () => {
+    setShuffledIds(declusterBySource(shuffleArray(allSourcesVisible)).map(a => a.id));
+  };
 
   const isMobile = useIsMobile();
   if (isMobile) {
@@ -396,6 +421,9 @@ export default function NewsDesk() {
         setShowDismissed={setShowDismissed}
         summaries={summaries}
         summarizing={summarizing}
+        summaryErrors={summaryErrors}
+        shuffledIds={shuffledIds}
+        onShuffle={shuffle}
         expandedId={expandedId}
         setExpandedId={setExpandedId}
         showAdd={showAdd}
@@ -427,15 +455,17 @@ export default function NewsDesk() {
     );
   }
 
-  const visible = articles.filter(a => {
+  const filtered = articles.filter(a => {
     if (showDismissed) return dismissed.has(a.id);
     if (dismissed.has(a.id)) return false;
     if (blocked.has(getDomain(a.link))) return false;
     if (isPaywalled(a)) return false;
     if (!isEnglish(a.title + " " + (a.excerpt || ""))) return false;
     if (activeSrc && a.sourceId !== activeSrc) return false;
+    if (!isWithinWindow(a.pubDate, activeSrc)) return false;
     return true;
   });
+  const visible = (!activeSrc && !showDismissed) ? orderArticles(filtered, { shuffledIds }) : filtered;
 
   const likedIds    = new Set(prefs.liked.map(a => a.id));
   const dislikedIds = new Set(prefs.disliked.map(a => a.id));
@@ -546,6 +576,11 @@ export default function NewsDesk() {
               {activeSrc && <span style={{ fontSize:11, color: sources.find(s => s.id === activeSrc)?.color }}>/ {sources.find(s => s.id === activeSrc)?.name}</span>}
               {showDismissed && <span style={{ fontSize:11, color:C.muted }}>/ Dismissed</span>}
               {fetching && articles.length > 0 && <span style={{ fontSize:10, color:C.muted, animation:"pulse 1.2s ease-in-out infinite" }}>refreshing…</span>}
+              {!activeSrc && !showDismissed && (
+                <button onClick={shuffle} disabled={visible.length < 2} style={{ ...btnBase, fontSize:10, color:C.accent, padding:"2px 10px" }}>
+                  🔀 Shuffle
+                </button>
+              )}
             </>
           )}
           {showDismissed && dismissed.size > 0 && (
@@ -566,6 +601,7 @@ export default function NewsDesk() {
               dismissed={dismissed}
               summaries={summaries}
               summarizing={summarizing}
+              summaryErrors={summaryErrors}
               expandedId={expandedId}
               likedIds={likedIds}
               dislikedIds={dislikedIds}
@@ -595,6 +631,7 @@ export default function NewsDesk() {
               isExpanded={expandedId === article.id}
               summary={summaries[article.id]}
               isSummarizing={summarizing[article.id]}
+              summaryError={summaryErrors[article.id]}
               isLiked={likedIds.has(article.id)}
               isDisliked={dislikedIds.has(article.id)}
               onToggle={() => setExpandedId(expandedId === article.id ? null : article.id)}
@@ -614,7 +651,7 @@ export default function NewsDesk() {
   );
 }
 
-function DigestPanel({ digest, loading, dismissed, summaries, summarizing, expandedId, likedIds, dislikedIds, onToggle, onSummarize, onDismiss, onBlock, onLike, onDislike, onUnlike, onUndislike }) {
+function DigestPanel({ digest, loading, dismissed, summaries, summarizing, summaryErrors, expandedId, likedIds, dislikedIds, onToggle, onSummarize, onDismiss, onBlock, onLike, onDislike, onUnlike, onUndislike }) {
   if (loading) {
     return (
       <div style={{ display:"flex", flexDirection:"column", alignItems:"center", justifyContent:"center", height:220, gap:12 }}>
@@ -645,6 +682,7 @@ function DigestPanel({ digest, loading, dismissed, summaries, summarizing, expan
           isExpanded={expandedId === pick.article.id}
           summary={summaries[pick.article.id]}
           isSummarizing={summarizing[pick.article.id]}
+          summaryError={summaryErrors[pick.article.id]}
           isLiked={likedIds?.has(pick.article.id)}
           isDisliked={dislikedIds?.has(pick.article.id)}
           onToggle={() => onToggle(pick.article.id)}
@@ -661,7 +699,7 @@ function DigestPanel({ digest, loading, dismissed, summaries, summarizing, expan
   );
 }
 
-function DigestCard({ rank, pick, isExpanded, summary, isSummarizing, isLiked, isDisliked, onToggle, onSummarize, onDismiss, onBlock, onLike, onDislike, onUnlike, onUndislike }) {
+function DigestCard({ rank, pick, isExpanded, summary, isSummarizing, summaryError, isLiked, isDisliked, onToggle, onSummarize, onDismiss, onBlock, onLike, onDislike, onUnlike, onUndislike }) {
   const { article, reason } = pick;
   const [hov, setHov] = useState(false);
   const [btnHov, setBtnHov] = useState(null);
@@ -712,11 +750,13 @@ function DigestCard({ rank, pick, isExpanded, summary, isSummarizing, isLiked, i
           style={{ ...actionBtn, color:C.text, borderColor: btnHov === "read" ? C.text : C.border, textDecoration:"none" }}>
           ↗ Read
         </a>
-        <button disabled={!!summary || isSummarizing} onClick={onSummarize}
-          onMouseEnter={() => setBtnHov("sum")} onMouseLeave={() => setBtnHov(null)}
-          style={{ ...actionBtn, color:"#e8874b", borderColor: btnHov === "sum" && !summary && !isSummarizing ? "#e8874b" : "rgba(232,135,75,0.3)", background: btnHov === "sum" && !summary && !isSummarizing ? "rgba(232,135,75,0.1)" : "none", opacity:(!!summary || isSummarizing) ? 0.55 : 1 }}>
-          {isSummarizing ? "⟳ Thinking…" : summary ? "✓ Summarized" : "✦ AI Summary"}
-        </button>
+        {!summary && (
+          <button disabled={isSummarizing} onClick={onSummarize}
+            onMouseEnter={() => setBtnHov("sum")} onMouseLeave={() => setBtnHov(null)}
+            style={{ ...actionBtn, color:"#e8874b", borderColor: btnHov === "sum" && !isSummarizing ? "#e8874b" : "rgba(232,135,75,0.3)", background: btnHov === "sum" && !isSummarizing ? "rgba(232,135,75,0.1)" : "none", opacity: isSummarizing ? 0.55 : 1 }}>
+            {isSummarizing ? "⟳ Thinking…" : summaryError ? "⚠ Retry" : "✦ AI Summary"}
+          </button>
+        )}
         <LikeDislikeButtons
           isLiked={isLiked} isDisliked={isDisliked}
           onLike={onLike} onDislike={onDislike}
@@ -882,7 +922,7 @@ function NavItem({ active, onClick, color, label, count, isAll, isSpecial, error
   );
 }
 
-function ArticleCard({ article, isDismissed, isExpanded, summary, isSummarizing, isLiked, isDisliked, onToggle, onSummarize, onDismiss, onUndismiss, onBlock, onLike, onDislike, onUnlike, onUndislike }) {
+function ArticleCard({ article, isDismissed, isExpanded, summary, isSummarizing, summaryError, isLiked, isDisliked, onToggle, onSummarize, onDismiss, onUndismiss, onBlock, onLike, onDislike, onUnlike, onUndislike }) {
   const [hov, setHov] = useState(false);
   const [btnHov, setBtnHov] = useState(null);
 
@@ -944,11 +984,13 @@ function ArticleCard({ article, isDismissed, isExpanded, summary, isSummarizing,
           style={{ ...actionBtn, color:"#c8cdd8", borderColor: btnHov === "read" ? "#c8cdd8" : "#1e2230", textDecoration:"none" }}>
           ↗ Read
         </a>
-        <button disabled={!!summary || isSummarizing} onClick={onSummarize}
-          onMouseEnter={() => setBtnHov("sum")} onMouseLeave={() => setBtnHov(null)}
-          style={{ ...actionBtn, color:"#e8874b", borderColor: btnHov === "sum" && !summary && !isSummarizing ? "#e8874b" : "rgba(232,135,75,0.3)", background: btnHov === "sum" && !summary && !isSummarizing ? "rgba(232,135,75,0.1)" : "none", opacity: (!!summary || isSummarizing) ? 0.55 : 1 }}>
-          {isSummarizing ? "⟳ Thinking…" : summary ? "✓ Summarized" : "✦ AI Summary"}
-        </button>
+        {!summary && (
+          <button disabled={isSummarizing} onClick={onSummarize}
+            onMouseEnter={() => setBtnHov("sum")} onMouseLeave={() => setBtnHov(null)}
+            style={{ ...actionBtn, color:"#e8874b", borderColor: btnHov === "sum" && !isSummarizing ? "#e8874b" : "rgba(232,135,75,0.3)", background: btnHov === "sum" && !isSummarizing ? "rgba(232,135,75,0.1)" : "none", opacity: isSummarizing ? 0.55 : 1 }}>
+            {isSummarizing ? "⟳ Thinking…" : summaryError ? "⚠ Retry" : "✦ AI Summary"}
+          </button>
+        )}
         <LikeDislikeButtons
           isLiked={isLiked} isDisliked={isDisliked}
           onLike={onLike} onDislike={onDislike}

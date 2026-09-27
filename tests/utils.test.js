@@ -1,5 +1,5 @@
 import { describe, it, expect, beforeEach, afterEach, vi } from "vitest";
-import { strip, ago, isEnglish } from "../src/utils.js";
+import { strip, ago, isEnglish, isWithinWindow, declusterBySource, orderArticles, buildObsidianClipUrl } from "../src/utils.js";
 
 describe("strip()", () => {
   it("removes single HTML tag", () => {
@@ -159,5 +159,112 @@ describe("isEnglish()", () => {
     // "café" — 1 diacritic out of 4 letters = 25%... actually that fails. Use a longer string.
     // "resume" + a long English sentence → very low diacritic density
     expect(isEnglish("This is a long English sentence about resumé and naïve assumptions.")).toBe(true);
+  });
+});
+
+describe("isWithinWindow()", () => {
+  beforeEach(() => {
+    vi.useFakeTimers();
+    vi.setSystemTime(new Date("2024-06-15T12:00:00Z"));
+  });
+  afterEach(() => {
+    vi.useRealTimers();
+  });
+
+  it("keeps an article 13 days old in the 14-day All-sources window (activeSrc=null)", () => {
+    expect(isWithinWindow("2024-06-02T12:00:00Z", null)).toBe(true);
+  });
+  it("drops an article 15 days old from the 14-day All-sources window", () => {
+    expect(isWithinWindow("2024-05-31T12:00:00Z", null)).toBe(false);
+  });
+  it("keeps an article 29 days old in the 30-day single-source window (activeSrc set)", () => {
+    expect(isWithinWindow("2024-05-17T12:00:00Z", "tldr")).toBe(true);
+  });
+  it("drops an article 31 days old from the 30-day single-source window", () => {
+    expect(isWithinWindow("2024-05-15T12:00:00Z", "tldr")).toBe(false);
+  });
+  it("fails open (keeps the article) when pubDate is unparsable", () => {
+    expect(isWithinWindow("not-a-date", null)).toBe(true);
+  });
+});
+
+describe("declusterBySource()", () => {
+  const mk = (id, sourceId) => ({ id, sourceId });
+
+  it("leaves an already-alternating order untouched", () => {
+    const items = [mk("a1", "A"), mk("b1", "B"), mk("a2", "A"), mk("b2", "B")];
+    expect(declusterBySource(items).map(i => i.id)).toEqual(["a1", "b1", "a2", "b2"]);
+  });
+
+  it("never produces a run longer than 2 from the same source", () => {
+    const items = [mk("a1", "A"), mk("a2", "A"), mk("a3", "A"), mk("b1", "B"), mk("a4", "A")];
+    const result = declusterBySource(items);
+    let run = 1;
+    for (let i = 1; i < result.length; i++) {
+      run = result[i].sourceId === result[i - 1].sourceId ? run + 1 : 1;
+      expect(run).toBeLessThanOrEqual(2);
+    }
+    expect(result.map(i => i.id).sort()).toEqual(["a1", "a2", "a3", "a4", "b1"].sort());
+  });
+
+  it("falls back to relaxing the constraint when one source dominates entirely", () => {
+    const items = [mk("a1", "A"), mk("a2", "A"), mk("a3", "A")];
+    const result = declusterBySource(items);
+    expect(result.map(i => i.id)).toEqual(["a1", "a2", "a3"]);
+  });
+
+  it("is idempotent on an already-valid sequence", () => {
+    const items = [mk("a1", "A"), mk("b1", "B"), mk("a2", "A"), mk("c1", "C"), mk("a3", "A")];
+    const once = declusterBySource(items);
+    const twice = declusterBySource(once);
+    expect(twice.map(i => i.id)).toEqual(once.map(i => i.id));
+  });
+});
+
+describe("orderArticles()", () => {
+  const mk = (id, sourceId) => ({ id, sourceId });
+  const filtered = [mk("a1", "A"), mk("a2", "A"), mk("b1", "B")];
+
+  it("returns the chronological decluttered order when no shuffle snapshot is given", () => {
+    expect(orderArticles(filtered).map(i => i.id)).toEqual(declusterBySource(filtered).map(i => i.id));
+  });
+
+  it("applies a shuffle snapshot's order when given", () => {
+    const shuffledIds = ["b1", "a1", "a2"];
+    expect(orderArticles(filtered, { shuffledIds }).map(i => i.id)).toEqual(["b1", "a1", "a2"]);
+  });
+
+  it("appends items missing from the shuffle snapshot", () => {
+    const shuffledIds = ["a1"];
+    const result = orderArticles(filtered, { shuffledIds });
+    expect(result.map(i => i.id).sort()).toEqual(["a1", "a2", "b1"]);
+  });
+});
+
+describe("buildObsidianClipUrl()", () => {
+  const article = {
+    title: "Test Title",
+    sourceName: "TLDR",
+    link: "https://example.com/a",
+    pubDate: "2024-06-01T12:00:00Z",
+    excerpt: "An excerpt.",
+  };
+
+  it("builds a shortcuts://run-shortcut URL with name, input=text, and text params", () => {
+    const url = buildObsidianClipUrl(article);
+    const parsed = new URL(url.replace("shortcuts://", "https://"));
+    expect(url.startsWith("shortcuts://run-shortcut?")).toBe(true);
+    expect(parsed.searchParams.get("name")).toBe("Clip to Obsidian");
+    expect(parsed.searchParams.get("input")).toBe("text");
+    const text = parsed.searchParams.get("text");
+    expect(text).toContain("Test Title");
+    expect(text).toContain("https://example.com/a");
+    expect(text).toContain("TLDR");
+  });
+
+  it("accepts a custom shortcut name", () => {
+    const url = buildObsidianClipUrl(article, "My Other Shortcut");
+    const parsed = new URL(url.replace("shortcuts://", "https://"));
+    expect(parsed.searchParams.get("name")).toBe("My Other Shortcut");
   });
 });

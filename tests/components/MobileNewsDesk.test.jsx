@@ -83,6 +83,23 @@ describe("MobileApp — feed tab (default)", () => {
     expect(screen.getByText("Mobile Article Two")).toBeInTheDocument();
   });
 
+  it("shows the shuffle button on the all-sources feed and calls onShuffle when clicked", () => {
+    const onShuffle = vi.fn();
+    render(<MobileApp {...makeProps({ onShuffle })} />);
+    fireEvent.click(screen.getByText("🔀"));
+    expect(onShuffle).toHaveBeenCalled();
+  });
+
+  it("hides the shuffle button when a single source is active", () => {
+    render(<MobileApp {...makeProps({ activeSrc: "tldr" })} />);
+    expect(screen.queryByText("🔀")).not.toBeInTheDocument();
+  });
+
+  it("hides the shuffle button in the dismissed view", () => {
+    render(<MobileApp {...makeProps({ showDismissed: true })} />);
+    expect(screen.queryByText("🔀")).not.toBeInTheDocument();
+  });
+
   it("shows loading indicator when fetching and no articles", () => {
     render(<MobileApp {...makeProps({ fetching: true, articles: [] })} />);
     expect(screen.getByText("fetching feeds…")).toBeInTheDocument();
@@ -172,6 +189,40 @@ describe("MobileApp — feed tab (default)", () => {
     expect(onDismiss).not.toHaveBeenCalled();
   });
 
+  describe("swipe-left to Obsidian", () => {
+    let originalLocation;
+    beforeEach(() => {
+      originalLocation = window.location;
+      delete window.location;
+      window.location = { href: "" };
+    });
+    afterEach(() => {
+      window.location = originalLocation;
+    });
+
+    it("navigates to a shortcuts:// URL when a card is swiped left past threshold", () => {
+      render(<MobileApp {...makeProps()} />);
+      const title = screen.getByText("Mobile Article One");
+      const swipeTarget = title.closest("[style*='position: relative']");
+      fireEvent.touchStart(swipeTarget, { touches: [{ clientX: 0, clientY: 0 }] });
+      fireEvent.touchMove(swipeTarget, { touches: [{ clientX: -150, clientY: 0 }] });
+      fireEvent.touchEnd(swipeTarget);
+      expect(window.location.href).toContain("shortcuts://run-shortcut?");
+      expect(window.location.href).toContain("name=Clip+to+Obsidian");
+      expect(window.location.href).toContain("Mobile+Article+One");
+    });
+
+    it("does not navigate when a card is swiped left below threshold", () => {
+      render(<MobileApp {...makeProps()} />);
+      const title = screen.getByText("Mobile Article One");
+      const swipeTarget = title.closest("[style*='position: relative']");
+      fireEvent.touchStart(swipeTarget, { touches: [{ clientX: 0, clientY: 0 }] });
+      fireEvent.touchMove(swipeTarget, { touches: [{ clientX: -20, clientY: 0 }] });
+      fireEvent.touchEnd(swipeTarget);
+      expect(window.location.href).toBe("");
+    });
+  });
+
   it("does not render an X dismiss button or a block button on cards", () => {
     render(<MobileApp {...makeProps()} />);
     expect(screen.queryByText("✕")).not.toBeInTheDocument();
@@ -198,10 +249,17 @@ describe("MobileApp — feed tab (default)", () => {
     expect(dots.length).toBeGreaterThan(0);
   });
 
-  it("shows '✓ Done' indicator when summary exists", () => {
+  it("hides the AI summary button once a summary exists", () => {
     const summaries = { "tldr::a1": "Done." };
     render(<MobileApp {...makeProps({ summaries })} />);
-    expect(screen.getByText("✓ Done")).toBeInTheDocument();
+    // Only article two (no summary) should still show its AI button; article one's is hidden.
+    expect(screen.queryAllByText("✦ AI").length).toBe(1);
+  });
+
+  it("shows '⚠ Retry' when a prior summarize attempt errored", () => {
+    const summaryErrors = { "tldr::a1": "Summary unavailable." };
+    render(<MobileApp {...makeProps({ summaryErrors })} />);
+    expect(screen.getAllByText("⚠ Retry").length).toBeGreaterThan(0);
   });
 
   it("calls setExpandedId when article title area is clicked", () => {
