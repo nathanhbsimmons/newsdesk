@@ -1,5 +1,5 @@
 import { describe, it, expect, beforeEach, afterEach, vi } from "vitest";
-import { strip, ago, isEnglish, isWithinWindow, declusterBySource, orderArticles, buildObsidianClipUrl } from "../src/utils.js";
+import { strip, ago, isEnglish, isWithinWindow, declusterBySource, orderArticles, buildObsidianClipUrl, hslToHex } from "../src/utils.js";
 
 describe("strip()", () => {
   it("removes single HTML tag", () => {
@@ -299,5 +299,27 @@ describe("buildObsidianClipUrl()", () => {
     const url = buildObsidianClipUrl(article, "My Other Shortcut");
     const parsed = new URL(url.replace("shortcuts://", "https://"));
     expect(parsed.searchParams.get("name")).toBe("My Other Shortcut");
+  });
+});
+
+describe("hslToHex()", () => {
+  it("converts pure red (0, 100%, 50%) to #ff0000", () => {
+    expect(hslToHex(0, 100, 50)).toBe("#ff0000");
+  });
+  it("converts pure green (120, 100%, 50%) to #00ff00", () => {
+    expect(hslToHex(120, 100, 50)).toBe("#00ff00");
+  });
+  it("converts pure blue (240, 100%, 50%) to #0000ff", () => {
+    expect(hslToHex(240, 100, 50)).toBe("#0000ff");
+  });
+  it("converts white (0, 0%, 100%) to #ffffff", () => {
+    expect(hslToHex(0, 0, 100)).toBe("#ffffff");
+  });
+  it("converts black (0, 0%, 0%) to #000000", () => {
+    expect(hslToHex(0, 0, 0)).toBe("#000000");
+  });
+  it("always returns a 6-digit hex string usable with an alpha suffix", () => {
+    const hex = hslToHex(203, 55, 65);
+    expect(hex).toMatch(/^#[0-9a-f]{6}$/);
   });
 });

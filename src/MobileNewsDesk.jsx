@@ -95,8 +95,9 @@ function MobileSignal({ isLiked, isDisliked, onLike, onDislike, onUnlike, onUndi
     <div style={{ display: "flex", gap: 2 }}>
       <button
         onClick={isLiked ? onUnlike : onLike}
+        aria-label={isLiked ? "Remove like" : "Like"}
         style={{
-          ...iconBtn, width: 33, height: 33,
+          ...iconBtn, width: 44, height: 44,
           borderColor: isLiked ? "rgba(74,222,128,0.3)"  : "transparent",
           background:  isLiked ? "rgba(74,222,128,0.08)" : "transparent",
         }}>
@@ -104,8 +105,9 @@ function MobileSignal({ isLiked, isDisliked, onLike, onDislike, onUnlike, onUndi
       </button>
       <button
         onClick={isDisliked ? onUndislike : onDislike}
+        aria-label={isDisliked ? "Remove dislike" : "Dislike"}
         style={{
-          ...iconBtn, width: 33, height: 33,
+          ...iconBtn, width: 44, height: 44,
           borderColor: isDisliked ? "rgba(224,82,82,0.3)"  : "transparent",
           background:  isDisliked ? "rgba(224,82,82,0.08)" : "transparent",
         }}>
@@ -157,14 +159,16 @@ function MobileTopBar({ tab, unreadCount, fetching, onRefresh, activeSrc, showDi
         {tab === "feed" && !activeSrc && !showDismissed && (
           <button
             onClick={onShuffle}
-            style={{ ...iconBtn, width: 36, height: 36, fontSize: 15, fontFamily: "inherit" }}>
-            🔀
+            aria-label="Shuffle"
+            style={{ ...iconBtn, width: 44, height: 44 }}>
+            <ShuffleIcon color={MC.muted} />
           </button>
         )}
         <button
           onClick={onRefresh}
+          aria-label="Refresh feeds"
           style={{
-            ...iconBtn, width: 36, height: 36, fontSize: 17, fontFamily: "inherit",
+            ...iconBtn, width: 44, height: 44, fontSize: 17, fontFamily: "inherit",
             border: `1px solid ${fetching ? "rgba(232,135,75,0.3)" : MC.border}`,
             color: fetching ? MC.accent : MC.muted,
             animation: fetching ? "spin 0.8s linear infinite" : "none",
@@ -254,8 +258,8 @@ function CardActions({ article, isDismissed, summary, isSummarizing, summaryErro
         </button>
       )}
       {isDismissed && (
-        <button onClick={onUndismiss}
-          style={{ ...iconBtn, width: 33, height: 33, color: MC.muted, fontSize: 15, fontFamily: "inherit" }}>
+        <button onClick={onUndismiss} aria-label="Restore article"
+          style={{ ...iconBtn, width: 44, height: 44, color: MC.muted, fontSize: 15, fontFamily: "inherit" }}>
           ↩
         </button>
       )}
@@ -570,15 +574,17 @@ function MobileSourcesView({ sources, srcStatus, onRemove, onReorder, blocked, o
             <button
               onClick={() => idx > 0 && onReorder(src.id, sources[idx - 1].id)}
               disabled={idx === 0}
-              style={{ ...iconBtn, width: 30, height: 30, fontSize: 14, color: idx === 0 ? MC.border : MC.muted, opacity: idx === 0 ? 0.3 : 1 }}
+              aria-label="Move source up"
+              style={{ ...iconBtn, width: 40, height: 40, fontSize: 14, color: idx === 0 ? MC.border : MC.muted, opacity: idx === 0 ? 0.3 : 1 }}
             >↑</button>
             <button
               onClick={() => idx < sources.length - 1 && onReorder(src.id, sources[idx + 1].id)}
               disabled={idx === sources.length - 1}
-              style={{ ...iconBtn, width: 30, height: 30, fontSize: 14, color: idx === sources.length - 1 ? MC.border : MC.muted, opacity: idx === sources.length - 1 ? 0.3 : 1 }}
+              aria-label="Move source down"
+              style={{ ...iconBtn, width: 40, height: 40, fontSize: 14, color: idx === sources.length - 1 ? MC.border : MC.muted, opacity: idx === sources.length - 1 ? 0.3 : 1 }}
             >↓</button>
-            <button onClick={() => onRemove(src.id)}
-              style={{ ...iconBtn, width: 36, height: 36, color: MC.muted, fontSize: 18, fontFamily: "inherit" }}>
+            <button onClick={() => onRemove(src.id)} aria-label={`Remove ${src.name}`}
+              style={{ ...iconBtn, width: 44, height: 44, color: MC.muted, fontSize: 18, fontFamily: "inherit" }}>
               ×
             </button>
           </div>
@@ -634,6 +640,19 @@ function MobileSourcesView({ sources, srcStatus, onRemove, onReorder, blocked, o
   );
 }
 
+// ── Shuffle icon ─────────────────────────────────────────────────────────────
+function ShuffleIcon({ color }) {
+  return (
+    <svg width="17" height="17" viewBox="0 0 24 24" fill="none" stroke={color} strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+      <polyline points="16 3 21 3 21 8" />
+      <line x1="4" y1="20" x2="21" y2="3" />
+      <polyline points="21 16 21 21 16 21" />
+      <line x1="15" y1="15" x2="21" y2="21" />
+      <line x1="4" y1="4" x2="9" y2="9" />
+    </svg>
+  );
+}
+
 // ── Bottom navigation icons ──────────────────────────────────────────────────
 function FeedIcon({ active }) {
   const c = active ? MC.accent : MC.muted;
@@ -683,8 +702,8 @@ function MobileBottomNav({ tab, onTab }) {
       {tabs.map(({ id, label, Icon }) => (
         <button key={id} onClick={() => onTab(id)}
           style={{
-            flex: 1, height: 72,
-            display: "flex", flexDirection: "column", alignItems: "center", justifyContent: "center", gap: 6,
+            flex: 1, height: 56, minHeight: 44,
+            display: "flex", flexDirection: "column", alignItems: "center", justifyContent: "center", gap: 4,
             background: "transparent", border: "none", cursor: "pointer",
             color: tab === id ? MC.accent : MC.muted, transition: "color 0.15s",
           }}>

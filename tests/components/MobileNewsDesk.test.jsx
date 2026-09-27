@@ -86,18 +86,18 @@ describe("MobileApp — feed tab (default)", () => {
   it("shows the shuffle button on the all-sources feed and calls onShuffle when clicked", () => {
     const onShuffle = vi.fn();
     render(<MobileApp {...makeProps({ onShuffle })} />);
-    fireEvent.click(screen.getByText("🔀"));
+    fireEvent.click(screen.getByLabelText("Shuffle"));
     expect(onShuffle).toHaveBeenCalled();
   });
 
   it("hides the shuffle button when a single source is active", () => {
     render(<MobileApp {...makeProps({ activeSrc: "tldr" })} />);
-    expect(screen.queryByText("🔀")).not.toBeInTheDocument();
+    expect(screen.queryByLabelText("Shuffle")).not.toBeInTheDocument();
   });
 
   it("hides the shuffle button in the dismissed view", () => {
     render(<MobileApp {...makeProps({ showDismissed: true })} />);
-    expect(screen.queryByText("🔀")).not.toBeInTheDocument();
+    expect(screen.queryByLabelText("Shuffle")).not.toBeInTheDocument();
   });
 
   it("shows loading indicator when fetching and no articles", () => {

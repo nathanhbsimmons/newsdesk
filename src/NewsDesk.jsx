@@ -1,6 +1,16 @@
 import { useState, useEffect } from "react";
-import { strip, ago, isEnglish, isWithinWindow, shuffleArray, declusterBySource, orderArticles } from "./utils.js";
+import { strip, ago, isEnglish, isWithinWindow, shuffleArray, declusterBySource, orderArticles, hslToHex } from "./utils.js";
 import MobileApp from "./MobileNewsDesk.jsx";
+
+const HSL_RE = /^hsl\((\d+(?:\.\d+)?),\s*(\d+(?:\.\d+)?)%,\s*(\d+(?:\.\d+)?)%\)$/i;
+
+// Older custom sources stored their color as an hsl() string, which breaks
+// the `${color}1a`-style alpha suffix used for badge/pill fills everywhere.
+function migrateSourceColor(src) {
+  const m = HSL_RE.exec(src.color || "");
+  if (!m) return src;
+  return { ...src, color: hslToHex(parseFloat(m[1]), parseFloat(m[2]), parseFloat(m[3])) };
+}
 
 function useIsMobile() {
   const [isMobile, setIsMobile] = useState(
@@ -106,7 +116,11 @@ export default function NewsDesk() {
     } catch {}
     try {
       const s = localStorage.getItem(K_SRC);
-      if (s) setSources(JSON.parse(s));
+      if (s) {
+        const parsed = JSON.parse(s).map(migrateSourceColor);
+        setSources(parsed);
+        localStorage.setItem(K_SRC, JSON.stringify(parsed));
+      }
     } catch {}
     try {
       const a = localStorage.getItem(K_ART);
@@ -140,9 +154,10 @@ export default function NewsDesk() {
         }
         if (d.data.sources) {
           // Full source list from server wins — apply it directly
-          const next = d.data.sources;
+          const next = d.data.sources.map(migrateSourceColor);
           setSources(next);
           try { localStorage.setItem(K_SRC, JSON.stringify(next)); } catch {}
+          syncSourcesRemote(next);
         } else if (d.data.sourceOrder) {
           // Legacy: only order saved — reorder local sources to match
           const order = d.data.sourceOrder;
@@ -150,7 +165,7 @@ export default function NewsDesk() {
             const map = new Map(prev.map(s => [s.id, s]));
             const ordered = order.filter(id => map.has(id)).map(id => map.get(id));
             const rest = prev.filter(s => !order.includes(s.id));
-            const next = [...ordered, ...rest];
+            const next = [...ordered, ...rest].map(migrateSourceColor);
             try { localStorage.setItem(K_SRC, JSON.stringify(next)); } catch {}
             return next;
           });
@@ -349,7 +364,7 @@ export default function NewsDesk() {
   const addSource = () => {
     if (!newName.trim() || !newUrl.trim()) return;
     const hue = (sources.length * 53 + 200) % 360;
-    const src = { id: `custom-${Date.now()}`, name: newName.trim(), url: newUrl.trim(), color: `hsl(${hue},55%,65%)` };
+    const src = { id: `custom-${Date.now()}`, name: newName.trim(), url: newUrl.trim(), color: hslToHex(hue, 55, 65) };
     const next = [...sources, src];
     setSources(next);
     try { localStorage.setItem(K_SRC, JSON.stringify(next)); } catch {}

@@ -1,3 +1,14 @@
+// Source badges/pills apply alpha via hex string concatenation (e.g. `${color}1a`),
+// which only produces valid CSS for 6-digit hex — hsl()/rgb() strings silently fail.
+export function hslToHex(h, s, l) {
+  s /= 100; l /= 100;
+  const k = (n) => (n + h / 30) % 12;
+  const a = s * Math.min(l, 1 - l);
+  const f = (n) => l - a * Math.max(-1, Math.min(k(n) - 3, Math.min(9 - k(n), 1)));
+  const toHex = (n) => Math.round(255 * f(n)).toString(16).padStart(2, "0");
+  return `#${toHex(0)}${toHex(8)}${toHex(4)}`;
+}
+
 export const strip = (html = "") =>
   html.replace(/<[^>]*>/g, " ")
       .replace(/&amp;/g, "&")
