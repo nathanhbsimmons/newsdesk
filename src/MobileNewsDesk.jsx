@@ -121,10 +121,10 @@ function MobileSignal({ isLiked, isDisliked, onLike, onDislike, onUnlike, onUndi
 function MobileTopBar({ tab, unreadCount, fetching, onRefresh, activeSrc, showDismissed, onShuffle }) {
   return (
     <div style={{
-      height: "calc(56px + env(safe-area-inset-top, 0px))",
+      height: "calc(56px + env(safe-area-inset-top, 0px) + 10px)",
       flexShrink: 0, boxSizing: "border-box",
       display: "flex", alignItems: "center", justifyContent: "space-between",
-      padding: "env(safe-area-inset-top, 0px) 16px 0",
+      padding: "calc(env(safe-area-inset-top, 0px) + 10px) 16px 0",
       background: MC.surf, borderBottom: `1px solid ${MC.border}`,
     }}>
       <div style={{ display: "flex", alignItems: "center", gap: 9 }}>
@@ -171,9 +171,8 @@ function MobileTopBar({ tab, unreadCount, fetching, onRefresh, activeSrc, showDi
             ...iconBtn, width: 44, height: 44, fontSize: 17, fontFamily: "inherit",
             border: `1px solid ${fetching ? "rgba(232,135,75,0.3)" : MC.border}`,
             color: fetching ? MC.accent : MC.muted,
-            animation: fetching ? "spin 0.8s linear infinite" : "none",
           }}>
-          ↻
+          <span style={{ display: "inline-block", animation: fetching ? "spin 0.8s linear infinite" : "none" }}>↻</span>
         </button>
       </div>
     </div>
