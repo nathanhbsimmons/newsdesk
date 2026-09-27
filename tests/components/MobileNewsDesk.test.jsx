@@ -208,8 +208,8 @@ describe("MobileApp — feed tab (default)", () => {
       fireEvent.touchMove(swipeTarget, { touches: [{ clientX: -150, clientY: 0 }] });
       fireEvent.touchEnd(swipeTarget);
       expect(window.location.href).toContain("shortcuts://run-shortcut?");
-      expect(window.location.href).toContain("name=Clip+to+Obsidian");
-      expect(window.location.href).toContain("Mobile+Article+One");
+      expect(window.location.href).toContain("name=Clip%20to%20Obsidian");
+      expect(window.location.href).toContain("Mobile%20Article%20One");
     });
 
     it("does not navigate when a card is swiped left below threshold", () => {

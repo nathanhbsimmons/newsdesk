@@ -116,6 +116,9 @@ export function buildObsidianClipUrl(article, shortcutName = OBSIDIAN_SHORTCUT_N
     "",
     article.excerpt || "",
   ].filter(Boolean);
-  const params = new URLSearchParams({ name: shortcutName, input: "text", text: lines.join("\n") });
-  return `shortcuts://run-shortcut?${params.toString()}`;
+  // URLSearchParams encodes spaces as "+" (form-encoding), but shortcuts://
+  // expects standard percent-encoding (%20) — encode manually to avoid that.
+  const params = { name: shortcutName, input: "text", text: lines.join("\n") };
+  const query = Object.entries(params).map(([k, v]) => `${k}=${encodeURIComponent(v)}`).join("&");
+  return `shortcuts://run-shortcut?${query}`;
 }
